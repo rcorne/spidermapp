@@ -2,7 +2,7 @@ import httpx
 import pytest
 
 from spidermapp.core import crawler as crawler_mod
-from spidermapp.core import security
+from spidermapp.core import render_check, security
 from spidermapp.core.models import CrawlConfig, TlsInfo
 
 PAGE_HOME = """
@@ -115,3 +115,37 @@ async def test_crawl_tracks_inlinks():
     result = await crawler_mod.crawl(config)
     about = next(p for p in result.pages if p.url == "https://example.test/about")
     assert "https://example.test/" in about.inlinks
+
+
+async def test_crawl_with_render_js_discovers_links_only_in_rendered_dom(monkeypatch):
+    """Regression test for SPA sites (e.g. Angular/React shells) whose raw
+    HTML has no <a href> at all: with render_js on, the crawler must follow
+    links found in the rendered DOM, not just the raw HTML."""
+
+    async def fake_start_browser(self):
+        self._browser = object()
+
+    async def fake_stop_browser(self):
+        self._browser = None
+
+    async def fake_render_with_browser(browser, url, viewport, user_agent=None, timeout_ms=15000):
+        if url == "https://example.test/":
+            html = (
+                "<html><head><title>Inicio del sitio de prueba</title>"
+                '<meta name="description" content="Descripción de la página de inicio con longitud suficiente para el check."></head>'
+                '<body><h1>Bienvenido</h1><a href="/rendered-only">Solo visible tras ejecutar JS</a></body></html>'
+            )
+        else:
+            html = "<html><head><title>Página renderizada</title></head><body><h1>Renderizada</h1></body></html>"
+        return render_check.RenderedPage(html=html, lcp_ms=100, cls=0.0, fcp_ms=80)
+
+    monkeypatch.setattr(crawler_mod.Crawler, "_start_browser", fake_start_browser)
+    monkeypatch.setattr(crawler_mod.Crawler, "_stop_browser", fake_stop_browser)
+    monkeypatch.setattr(crawler_mod.render_check, "render_with_browser", fake_render_with_browser)
+
+    config = CrawlConfig(seed_url="https://example.test/", max_pages=50, render_js=True)
+    result = await crawler_mod.crawl(config)
+
+    urls = {p.url for p in result.pages}
+    assert "https://example.test/rendered-only" in urls
+    assert "https://example.test/about" in urls

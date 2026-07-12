@@ -3,7 +3,7 @@ from __future__ import annotations
 import difflib
 from dataclasses import dataclass
 
-from spidermapp.core.html_analysis import analyze_html
+from spidermapp.core.html_analysis import HtmlAnalysis, analyze_html
 from spidermapp.core.models import Issue, IssueCategory, IssueSeverity, RenderInfo
 
 DESKTOP_VIEWPORT = {"width": 1366, "height": 768}
@@ -84,10 +84,15 @@ def compare_raw_vs_rendered(
     raw_h1: list[str],
     rendered_html: str,
     page_url: str,
+    rendered_analysis: HtmlAnalysis | None = None,
 ) -> RenderInfo:
     """Pure comparison: does the metadata visible in the raw HTML match what a
-    browser actually renders (i.e. what a JS-executing crawler/bot would see)?"""
-    rendered = analyze_html(rendered_html, page_url)
+    browser actually renders (i.e. what a JS-executing crawler/bot would see)?
+
+    Pass an already-parsed `rendered_analysis` (e.g. when the caller also
+    needs its .outlinks for crawl discovery on JS-rendered sites) to avoid
+    parsing the rendered HTML twice."""
+    rendered = rendered_analysis or analyze_html(rendered_html, page_url)
     return RenderInfo(
         rendered_html=rendered_html,
         raw_vs_rendered_title_match=(raw_title == rendered.title),

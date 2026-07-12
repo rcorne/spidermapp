@@ -15,6 +15,7 @@ from spidermapp.core.models import (
     Issue,
     IssueCategory,
     IssueSeverity,
+    LinkEdge,
     PageResult,
 )
 from spidermapp.core.soft_404 import detect_soft_404
@@ -256,10 +257,18 @@ class Crawler:
                 visible_text = _visible_text(html)
                 page.is_soft_404 = detect_soft_404(page.status_code, page.title, visible_text, page.word_count)
 
-                if self.config.render_js and self._browser is not None:
-                    await self._run_render_checks(page)
+                outlinks_for_discovery = list(analysis.outlinks)
 
-                for link in analysis.outlinks:
+                if self.config.render_js and self._browser is not None:
+                    rendered_outlinks = await self._run_render_checks(page)
+                    seen_targets = {link.target for link in outlinks_for_discovery}
+                    for link in rendered_outlinks:
+                        if link.target not in seen_targets:
+                            outlinks_for_discovery.append(link)
+                            seen_targets.add(link.target)
+                    page.outlinks = outlinks_for_discovery
+
+                for link in outlinks_for_discovery:
                     if not link.is_internal:
                         continue
                     if not self.config.include_subdomains and not url_utils.is_same_site(
@@ -271,7 +280,10 @@ class Crawler:
             page.issues = issues_mod.collect_page_issues(page, self.priority_urls)
             return page, discovered
 
-    async def _run_render_checks(self, page: PageResult) -> None:
+    async def _run_render_checks(self, page: PageResult) -> list[LinkEdge]:
+        """Render the page with a real browser, compare it against the raw
+        HTML, and return the links found in the rendered DOM so JS-only
+        sites (SPAs with no <a href> in the raw HTML) can still be crawled."""
         desktop = await render_check.render_with_browser(self._browser, page.final_url, render_check.DESKTOP_VIEWPORT)
         mobile = await render_check.render_with_browser(
             self._browser,
@@ -282,9 +294,17 @@ class Crawler:
 
         if desktop.error:
             page.render = render_check.RenderInfo(error=desktop.error)
-            return
+            return []
 
-        render_info = render_check.compare_raw_vs_rendered(page.title, page.meta_description, page.h1, desktop.html, page.final_url)
+        rendered_analysis = html_analysis.analyze_html(desktop.html, page.final_url)
+        render_info = render_check.compare_raw_vs_rendered(
+            page.title,
+            page.meta_description,
+            page.h1,
+            desktop.html,
+            page.final_url,
+            rendered_analysis=rendered_analysis,
+        )
         render_info.lcp_ms = desktop.lcp_ms
         render_info.cls = desktop.cls
         render_info.fcp_ms = desktop.fcp_ms
@@ -295,6 +315,7 @@ class Crawler:
             render_info.mobile_desktop_match = render_check.compare_mobile_desktop(desktop_text, mobile_text)
 
         page.render = render_info
+        return rendered_analysis.outlinks
 
     async def _run_site_wide_checks(self, client: httpx.AsyncClient, result: CrawlResult) -> None:
         crawled_urls = [p.final_url or p.url for p in self.pages if p.status_code is not None]
