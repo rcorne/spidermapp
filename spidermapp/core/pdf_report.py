@@ -32,8 +32,12 @@ def generate_pdf_report(result: CrawlResult, path: str | Path, priority_urls: se
     offenders = stats.top_offenders(result.pages, limit=10)
 
     pdf = FPDF(orientation="P", unit="mm", format="A4")
+    pdf.core_fonts_encoding = "cp1252"
     pdf.set_auto_page_break(auto=True, margin=18)
     pdf.add_page()
+
+    def _s(text: str) -> str:
+        return str(text).encode("cp1252", errors="replace").decode("cp1252")
 
     pdf.set_font("Helvetica", "B", 22)
     pdf.set_text_color(*PRIMARY_RGB)
@@ -42,7 +46,7 @@ def generate_pdf_report(result: CrawlResult, path: str | Path, priority_urls: se
     pdf.set_font("Helvetica", "", 11)
     pdf.set_text_color(*MUTED_RGB)
     pdf.cell(0, 7, "Reporte de auditoría SEO", new_x="LMARGIN", new_y="NEXT")
-    pdf.cell(0, 6, result.seed_url, new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(0, 6, _s(result.seed_url), new_x="LMARGIN", new_y="NEXT")
     pdf.cell(0, 6, datetime.now().strftime("%d/%m/%Y %H:%M"), new_x="LMARGIN", new_y="NEXT")
 
     pdf.ln(6)
@@ -83,7 +87,7 @@ def generate_pdf_report(result: CrawlResult, path: str | Path, priority_urls: se
     pdf.set_font("Helvetica", "", 9)
     for bucket in breakdown:
         label = bucket.category.value.replace("_", " ").title()
-        pdf.cell(col_widths[0], 6.5, label, border=1)
+        pdf.cell(col_widths[0], 6.5, _s(label), border=1)
         pdf.cell(col_widths[1], 6.5, str(bucket.critical), border=1, align="C")
         pdf.cell(col_widths[2], 6.5, str(bucket.warning), border=1, align="C")
         pdf.cell(col_widths[3], 6.5, str(bucket.info), border=1, align="C")
@@ -100,7 +104,7 @@ def generate_pdf_report(result: CrawlResult, path: str | Path, priority_urls: se
     pdf.set_text_color(*MUTED_RGB)
     if offenders:
         for page in offenders:
-            pdf.multi_cell(0, 6, f"[{len(page.issues)} issues]  {page.url}", new_x="LMARGIN", new_y="NEXT")
+            pdf.multi_cell(0, 6, _s(f"[{len(page.issues)} issues]  {page.url}"), new_x="LMARGIN", new_y="NEXT")
     else:
         pdf.cell(0, 6, "Sin páginas con issues.", new_x="LMARGIN", new_y="NEXT")
 

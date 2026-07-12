@@ -31,6 +31,10 @@ class HtmlAnalysis:
     word_count: int = 0
     outlinks: list[LinkEdge] = field(default_factory=list)
     content_hash: str = ""
+    meta_keywords: str = ""
+    images_without_alt: int = 0
+    empty_anchors: int = 0
+    visible_text: str = ""
 
 
 def analyze_html(html: str, page_url: str) -> HtmlAnalysis:
@@ -66,6 +70,18 @@ def analyze_html(html: str, page_url: str) -> HtmlAnalysis:
             continue
         json_ld_types.extend(_extract_ld_types(data))
 
+    meta_kw_tag = soup.find("meta", attrs={"name": re.compile("^keywords$", re.I)})
+    meta_keywords = meta_kw_tag.get("content", "").strip() if meta_kw_tag else ""
+
+    images_without_alt = sum(1 for img in soup.find_all("img") if not (img.get("alt") or "").strip())
+
+    empty_anchors = 0
+    for a in soup.find_all("a"):
+        href = (a.get("href") or "").strip()
+        has_text = bool(a.get_text(strip=True)) or a.find("img") is not None
+        if not href or not has_text:
+            empty_anchors += 1
+
     for tag in soup(["script", "style", "noscript"]):
         tag.decompose()
     visible_text = soup.get_text(separator=" ", strip=True)
@@ -86,6 +102,10 @@ def analyze_html(html: str, page_url: str) -> HtmlAnalysis:
         word_count=word_count,
         outlinks=outlinks,
         content_hash=content_hash,
+        meta_keywords=meta_keywords,
+        images_without_alt=images_without_alt,
+        empty_anchors=empty_anchors,
+        visible_text=visible_text,
     )
 
 
@@ -196,6 +216,60 @@ def check_thin_content(word_count: int) -> list[Issue]:
                 IssueSeverity.INFO,
                 "thin_content",
                 f"Contenido posiblemente escaso ({word_count} palabras).",
+            )
+        ]
+    return []
+
+
+def check_h2(h2_list: list[str]) -> list[Issue]:
+    if not h2_list:
+        return [
+            Issue(
+                IssueCategory.META,
+                IssueSeverity.INFO,
+                "h2_missing",
+                "La página no tiene ningún encabezado <h2>.",
+            )
+        ]
+    return []
+
+
+def check_images_alt(images_without_alt: int) -> list[Issue]:
+    if images_without_alt > 0:
+        return [
+            Issue(
+                IssueCategory.META,
+                IssueSeverity.WARNING,
+                "img_alt_missing",
+                f"{images_without_alt} imagen(es) sin atributo alt.",
+            )
+        ]
+    return []
+
+
+def check_empty_anchors(empty_anchors: int) -> list[Issue]:
+    if empty_anchors > 0:
+        return [
+            Issue(
+                IssueCategory.LINKS,
+                IssueSeverity.WARNING,
+                "empty_anchors",
+                f"{empty_anchors} etiqueta(s) <a> vacías (sin href o sin texto/imagen).",
+            )
+        ]
+    return []
+
+
+def check_sitemap_membership(in_sitemap: bool, sitemap_has_urls: bool, is_indexable: bool) -> list[Issue]:
+    """Flag indexable pages that the sitemap doesn't declare (only meaningful
+    when the site actually has a sitemap with URLs)."""
+    if sitemap_has_urls and is_indexable and not in_sitemap:
+        return [
+            Issue(
+                IssueCategory.SITEMAP_ROBOTS,
+                IssueSeverity.INFO,
+                "not_in_sitemap",
+                "Página indexable que no aparece en el sitemap.xml.",
             )
         ]
     return []

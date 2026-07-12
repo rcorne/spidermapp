@@ -63,6 +63,31 @@ _RECOMMENDATIONS: dict[str, Recommendation] = {
         "El H1 ayuda a Google y a los usuarios a entender de qué trata la página de un vistazo.",
         ["Agrega un H1 que resuma el tema principal de la página."],
     ),
+    "h2_missing": Recommendation(
+        "La página no tiene encabezados H2",
+        "Los H2 estructuran el contenido en secciones que Google usa para entender los subtemas de la página.",
+        ["Si la página tiene suficiente contenido, organízalo en secciones con H2 descriptivos."],
+    ),
+    "img_alt_missing": Recommendation(
+        "Imágenes sin atributo alt",
+        "El alt describe la imagen para Google Imágenes y para lectores de pantalla — sin él pierdes tráfico de imágenes y accesibilidad.",
+        ["Agrega un alt descriptivo a cada imagen con contenido.", "Para imágenes decorativas, usa alt=\"\" (vacío) explícito."],
+    ),
+    "empty_anchors": Recommendation(
+        "Etiquetas <a> vacías",
+        "Enlaces sin href o sin texto/imagen no transmiten señal a Google y confunden a lectores de pantalla.",
+        ["Elimina las etiquetas <a> vacías o dales un href y texto ancla descriptivo."],
+    ),
+    "not_in_sitemap": Recommendation(
+        "Página indexable ausente del sitemap",
+        "El sitemap debería listar todas las páginas que quieres que Google indexe — esta no aparece.",
+        ["Agrega esta URL al sitemap.xml si debe indexarse."],
+    ),
+    "spa_render_unavailable": Recommendation(
+        "El sitio requiere JavaScript pero el navegador de renderizado no está disponible",
+        "El HTML inicial no contiene enlaces (aplicación JavaScript) y no se pudo iniciar Chromium para leer el DOM renderizado, así que el crawl no puede continuar más allá de esta página.",
+        ["Ejecuta 'playwright install chromium' una vez en esta Mac.", "Vuelve a correr el crawl."],
+    ),
     "h1_multiple": Recommendation(
         "Hay más de un H1 en la página",
         "Múltiples H1 diluyen la señal de cuál es el tema principal de la página.",

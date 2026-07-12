@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QFileDialog,
     QHBoxLayout,
@@ -9,6 +13,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QMainWindow,
     QMessageBox,
+    QProgressBar,
     QPushButton,
     QSpinBox,
     QSplitter,
@@ -19,17 +24,22 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from spidermapp.core import export, history, pdf_report
+from spidermapp.core import export, history, pdf_report, reports
 from spidermapp.core.models import CrawlConfig, CrawlResult, IssueCategory, PageResult
 from spidermapp.gui import theme
+from spidermapp.gui.connectors_dialog import ConnectorsDialog
 from spidermapp.gui.crawl_worker import CrawlWorker
 from spidermapp.gui.dashboard import DashboardTab
 from spidermapp.gui.detail_panel import DetailPanel
+from spidermapp.gui.history_dialog import HistoryDialog
+from spidermapp.gui.llm_tab import LlmVisibilityTab
 from spidermapp.gui.sidebar import ALL_KEY, DUPLICATES_KEY, ISSUES_KEY, ORPHANS_KEY, Sidebar
 from spidermapp.gui.sitemap_view import SiteMapTab
+from spidermapp.gui.structure_view import StructureTab
 from spidermapp.gui.table_model import IssueFilterProxyModel, PageTableModel
 
 SITEMAP_REFRESH_EVERY_N_PAGES = 15
+MAX_CRAWL_PAGES = 10000
 
 
 class MainWindow(QMainWindow):
@@ -51,6 +61,8 @@ class MainWindow(QMainWindow):
         self._build_ui()
 
     def _build_ui(self) -> None:
+        self._build_menus()
+
         central = QWidget()
         self.setCentralWidget(central)
         root_layout = QVBoxLayout(central)
@@ -62,6 +74,8 @@ class MainWindow(QMainWindow):
         toolbar_container.setLayout(self._build_toolbar())
         root_layout.addWidget(toolbar_container)
 
+        root_layout.addWidget(self._build_progress_row())
+
         self.tabs = QTabWidget()
         root_layout.addWidget(self.tabs, stretch=1)
 
@@ -72,10 +86,86 @@ class MainWindow(QMainWindow):
         self.sitemap_tab.node_clicked.connect(self._focus_url_in_table)
         self.tabs.addTab(self.sitemap_tab, "Mapa del sitio")
 
-        self.tabs.addTab(self._build_table_tab(), "Tabla")
+        self.structure_tab = StructureTab()
+        self.structure_tab.node_clicked.connect(self._focus_url_in_table)
+        self.tabs.addTab(self.structure_tab, "Estructura")
+
+        self.table_tab = self._build_table_tab()
+        self.tabs.addTab(self.table_tab, "Tabla")
+
+        self.llm_tab = LlmVisibilityTab()
+        self.tabs.addTab(self.llm_tab, "Visibilidad en LLMs")
 
         self.setStatusBar(QStatusBar())
         self.statusBar().showMessage("Listo.")
+
+    def _build_menus(self) -> None:
+        menubar = self.menuBar()
+
+        def action(menu, text: str, slot, shortcut: str | None = None) -> QAction:
+            act = QAction(text, self)
+            if shortcut:
+                act.setShortcut(QKeySequence(shortcut))
+            act.triggered.connect(slot)
+            menu.addAction(act)
+            return act
+
+        archivo = menubar.addMenu("Archivo")
+        action(archivo, "Nuevo crawl…", self._menu_new_crawl, "Ctrl+N")
+        action(archivo, "Abrir crawl guardado…", self._open_history_dialog, "Ctrl+O")
+        archivo.addSeparator()
+        action(archivo, "Salir", QApplication.instance().quit, "Ctrl+Q")
+
+        edicion = menubar.addMenu("Edición")
+        action(edicion, "Copiar URL seleccionada", self._copy_selected_url, "Ctrl+C")
+        action(edicion, "Copiar tabla visible (CSV)", self._copy_visible_table)
+
+        conectores = menubar.addMenu("Conectores")
+        action(conectores, "Configurar APIs…", self._open_connectors_dialog)
+
+        analisis = menubar.addMenu("Análisis")
+        action(analisis, "Iniciar crawl", self._start_crawl, "Ctrl+R")
+        action(analisis, "Detener crawl", self._stop_crawl, "Ctrl+.")
+        analisis.addSeparator()
+        action(analisis, "Comparar con crawl anterior", self._compare_with_previous)
+        action(analisis, "Historial de crawls…", self._open_history_dialog)
+        analisis.addSeparator()
+        action(analisis, "Visibilidad en LLMs", lambda: self.tabs.setCurrentWidget(self.llm_tab))
+        action(analisis, "PageSpeed de la URL semilla", self._run_pagespeed)
+
+        exportar = menubar.addMenu("Exportar")
+        action(exportar, "CSV…", lambda: self._export("csv"))
+        action(exportar, "XLSX…", lambda: self._export("xlsx"))
+        action(exportar, "Reporte PDF ejecutivo…", self._export_pdf)
+        action(exportar, "Informes por área de SEO…", self._export_area_reports)
+
+        ayuda = menubar.addMenu("Ayuda")
+        action(ayuda, "Acerca de Spidermapp", self._show_about)
+
+    def _build_progress_row(self) -> QWidget:
+        container = QWidget()
+        container.setStyleSheet("background: #F9FAFB; border-bottom: 1px solid #E5E7EB;")
+        row = QHBoxLayout(container)
+        row.setContentsMargins(12, 4, 12, 4)
+        row.setSpacing(10)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setFormat("%v de %m páginas")
+        self.progress_bar.setFixedHeight(14)
+        self.progress_bar.setStyleSheet(
+            f"QProgressBar {{ border: 1px solid #E5E7EB; border-radius: 7px; background: #EEF0F2; font-size: 10px; }}"
+            f"QProgressBar::chunk {{ background-color: {theme.PRIMARY}; border-radius: 7px; }}"
+        )
+        row.addWidget(self.progress_bar, stretch=1)
+
+        self.phase_label = QLabel("Listo.")
+        self.phase_label.setStyleSheet("color: #6B7280; font-size: 11px;")
+        self.phase_label.setMinimumWidth(340)
+        row.addWidget(self.phase_label)
+        return container
 
     def _build_table_tab(self) -> QWidget:
         container = QWidget()
@@ -122,7 +212,7 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(QLabel("Máx. páginas:"))
         self.max_pages_input = QSpinBox()
-        self.max_pages_input.setRange(1, 100000)
+        self.max_pages_input.setRange(1, MAX_CRAWL_PAGES)
         self.max_pages_input.setValue(500)
         layout.addWidget(self.max_pages_input)
 
@@ -197,6 +287,8 @@ class MainWindow(QMainWindow):
         self.sidebar.refresh_counts([])
         self.dashboard_tab.update_data([])
         self.sitemap_tab.set_pages([], seed_url)
+        self.structure_tab.set_pages([], seed_url)
+        self.llm_tab.set_crawl_data("", [])
         self.compare_button.setEnabled(False)
 
         config = CrawlConfig(
@@ -210,9 +302,14 @@ class MainWindow(QMainWindow):
         self._worker = CrawlWorker(config)
         self._worker.page_found.connect(self._on_page_found)
         self._worker.progress.connect(self._on_progress)
+        self._worker.status_changed.connect(self._on_status_changed)
         self._worker.crawl_finished.connect(self._on_crawl_finished)
         self._worker.crawl_error.connect(self._on_crawl_error)
         self._worker.start()
+
+        self.progress_bar.setRange(0, config.max_pages)
+        self.progress_bar.setValue(0)
+        self.phase_label.setText("Iniciando crawl…")
 
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(True)
@@ -236,11 +333,18 @@ class MainWindow(QMainWindow):
             self.sitemap_tab.set_pages(self._all_pages, seed)
 
     def _on_progress(self, done: int, total: int) -> None:
+        self.progress_bar.setRange(0, total)
+        self.progress_bar.setValue(done)
         self.statusBar().showMessage(f"Rastreadas {done} de {total} páginas (máx.)...")
+
+    def _on_status_changed(self, message: str) -> None:
+        self.phase_label.setText(message)
 
     def _on_crawl_finished(self, result: CrawlResult) -> None:
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
+        self.progress_bar.setValue(self.progress_bar.maximum() if not result.stopped_early else self.progress_bar.value())
+        self.phase_label.setText("Crawl terminado.")
 
         # Safety net: the table is normally kept in sync incrementally via
         # page_found signals during the crawl, but the final result is the
@@ -252,6 +356,8 @@ class MainWindow(QMainWindow):
         self._all_pages = self.table_model.all_pages()
         self.dashboard_tab.update_data(self._all_pages)
         self.sitemap_tab.set_pages(self._all_pages, result.seed_url)
+        self.structure_tab.set_pages(self._all_pages, result.seed_url)
+        self.llm_tab.set_crawl_data(result.seed_url, self._all_pages)
         self.sidebar.refresh_counts(self._all_pages)
 
         self._last_result = result
@@ -298,7 +404,7 @@ class MainWindow(QMainWindow):
         self.detail_panel.show_page(page)
 
     def _focus_url_in_table(self, url: str) -> None:
-        self.tabs.setCurrentIndex(2)
+        self.tabs.setCurrentWidget(self.table_tab)
         self.proxy_model.set_filter_all()
         self.sidebar.setCurrentRow(0)
         for row in range(self.proxy_model.rowCount()):
@@ -378,3 +484,176 @@ class MainWindow(QMainWindow):
             return
 
         self.statusBar().showMessage(f"Reporte PDF exportado a {path}")
+
+    # ------------------------------------------------------------- menús
+
+    def _menu_new_crawl(self) -> None:
+        self.url_input.clear()
+        self.url_input.setFocus()
+
+    def _copy_selected_url(self) -> None:
+        indexes = self.table_view.selectionModel().selectedRows()
+        if not indexes:
+            return
+        source_index = self.proxy_model.mapToSource(indexes[0])
+        page = self.table_model.page_at(source_index.row())
+        if page is not None:
+            QApplication.clipboard().setText(page.url)
+            self.statusBar().showMessage("URL copiada al portapapeles.")
+
+    def _copy_visible_table(self) -> None:
+        rows = []
+        headers = [self.table_model.headerData(c, Qt.Orientation.Horizontal) for c in range(self.table_model.columnCount())]
+        rows.append(",".join(str(h) for h in headers))
+        for row in range(self.proxy_model.rowCount()):
+            values = []
+            for col in range(self.proxy_model.columnCount()):
+                value = self.proxy_model.data(self.proxy_model.index(row, col))
+                text = "" if value is None else str(value)
+                values.append('"' + text.replace('"', '""') + '"')
+            rows.append(",".join(values))
+        QApplication.clipboard().setText("\n".join(rows))
+        self.statusBar().showMessage(f"{self.proxy_model.rowCount()} filas copiadas como CSV.")
+
+    def _open_connectors_dialog(self) -> None:
+        dialog = ConnectorsDialog(self)
+        if dialog.exec():
+            self.statusBar().showMessage("Conectores guardados.")
+            if self._last_result is not None:
+                self.llm_tab.set_crawl_data(self._last_result.seed_url, self._all_pages)
+
+    def _open_history_dialog(self) -> None:
+        dialog = HistoryDialog(self)
+        if not dialog.exec():
+            return
+        if dialog.selected_path is not None:
+            self._load_saved_crawl(dialog.selected_path)
+        elif dialog.compare_paths is not None:
+            self._compare_two_snapshots(*dialog.compare_paths)
+
+    def _load_saved_crawl(self, path) -> None:
+        try:
+            result = history.load_full_crawl(path)
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.critical(self, "Spidermapp", f"No se pudo abrir el crawl guardado: {exc}")
+            return
+        if result is None:
+            QMessageBox.information(
+                self, "Spidermapp",
+                "Ese crawl es de una versión anterior y solo sirve para comparaciones, no se puede abrir completo."
+            )
+            return
+
+        self.table_model.clear()
+        for page in result.pages:
+            self.table_model.upsert_page(page)
+        self._all_pages = self.table_model.all_pages()
+        self._last_result = result
+        self.url_input.setText(result.seed_url)
+
+        self.dashboard_tab.update_data(self._all_pages)
+        self.sitemap_tab.set_pages(self._all_pages, result.seed_url)
+        self.structure_tab.set_pages(self._all_pages, result.seed_url)
+        self.llm_tab.set_crawl_data(result.seed_url, self._all_pages)
+        self.sidebar.refresh_counts(self._all_pages)
+        self._previous_snapshot = history.load_previous_snapshot(result.seed_url, before=result.started_at)
+        self.compare_button.setEnabled(self._previous_snapshot is not None)
+        self.statusBar().showMessage(f"Crawl guardado cargado: {result.seed_url} ({len(result.pages)} páginas).")
+
+    def _compare_two_snapshots(self, path_a, path_b) -> None:
+        try:
+            snap_a = history.load_snapshot(path_a)
+            snap_b = history.load_snapshot(path_b)
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.critical(self, "Spidermapp", f"No se pudieron cargar los crawls: {exc}")
+            return
+        older, newer_path = (snap_a, path_b) if snap_a.timestamp <= snap_b.timestamp else (snap_b, path_a)
+        newer_full = history.load_full_crawl(newer_path)
+        if newer_full is None:
+            QMessageBox.information(self, "Spidermapp", "El crawl más reciente no tiene datos completos para comparar.")
+            return
+        diff = history.diff_crawls(older, newer_full)
+        self._show_diff_dialog(diff)
+
+    def _show_diff_dialog(self, diff) -> None:
+        if diff.is_empty:
+            QMessageBox.information(self, "Comparación de crawls", "No hay cambios entre los crawls seleccionados.")
+            return
+        when = datetime.fromtimestamp(diff.previous_timestamp).strftime("%d/%m/%Y %H:%M")
+        lines = [
+            f"Comparado contra el crawl del {when}:",
+            "",
+            f"Issues nuevos: {diff.new_issue_count}",
+            f"Issues resueltos: {diff.resolved_issue_count}",
+            f"Páginas nuevas: {len(diff.new_pages)}",
+            f"Páginas que desaparecieron: {len(diff.removed_pages)}",
+        ]
+        if diff.new_issue_codes_by_url:
+            lines += ["", "Nuevos issues (primeras 10 URLs):"]
+            for url, codes in list(diff.new_issue_codes_by_url.items())[:10]:
+                lines.append(f"  • {url}: {', '.join(codes)}")
+        if diff.resolved_issue_codes_by_url:
+            lines += ["", "Issues resueltos (primeras 10 URLs):"]
+            for url, codes in list(diff.resolved_issue_codes_by_url.items())[:10]:
+                lines.append(f"  • {url}: {', '.join(codes)}")
+        QMessageBox.information(self, "Comparación de crawls", "\n".join(lines))
+
+    def _run_pagespeed(self) -> None:
+        from spidermapp.core import connectors
+
+        seed = self.url_input.text().strip()
+        if not seed:
+            QMessageBox.warning(self, "Spidermapp", "Ingresa una URL primero.")
+            return
+        if not connectors.is_configured("pagespeed"):
+            QMessageBox.information(
+                self, "Spidermapp",
+                "Configura tu API key de PageSpeed Insights en Conectores → Configurar APIs "
+                "(es gratuita, ver el enlace en ese diálogo)."
+            )
+            return
+        self.statusBar().showMessage("Consultando PageSpeed Insights…")
+        QApplication.processEvents()
+        try:
+            data = connectors.run_pagespeed(seed)
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.critical(self, "Spidermapp", f"PageSpeed falló: {exc}")
+            self.statusBar().showMessage("PageSpeed falló.")
+            return
+        lines = [
+            f"URL: {seed}",
+            f"Performance (mobile): {data['score']}/100" if data["score"] is not None else "Performance: n/d",
+            f"LCP: {data['lcp_ms']:.0f} ms" if data["lcp_ms"] is not None else "LCP: n/d",
+            f"CLS: {data['cls']:.3f}" if data["cls"] is not None else "CLS: n/d",
+            f"FCP: {data['fcp_ms']:.0f} ms" if data["fcp_ms"] is not None else "FCP: n/d",
+            f"TBT: {data['tbt_ms']:.0f} ms" if data["tbt_ms"] is not None else "TBT: n/d",
+        ]
+        self.statusBar().showMessage("PageSpeed listo.")
+        QMessageBox.information(self, "PageSpeed Insights (datos de campo de Google)", "\n".join(lines))
+
+    def _export_area_reports(self) -> None:
+        if self._last_result is None:
+            QMessageBox.warning(self, "Spidermapp", "No hay resultados para generar informes todavía.")
+            return
+        directory = QFileDialog.getExistingDirectory(self, "Carpeta para los informes por área")
+        if not directory:
+            return
+        try:
+            written = reports.generate_area_reports(self._last_result, directory)
+        except Exception as exc:  # noqa: BLE001
+            QMessageBox.critical(self, "Spidermapp", f"No se pudieron generar los informes: {exc}")
+            return
+        if not written:
+            QMessageBox.information(self, "Spidermapp", "No hay hallazgos: no se generó ningún informe.")
+            return
+        names = "\n".join(f"  • {p.name}" for p in written)
+        QMessageBox.information(self, "Informes por área", f"Se generaron {len(written)} informes en {directory}:\n{names}")
+        self.statusBar().showMessage(f"{len(written)} informes generados en {directory}.")
+
+    def _show_about(self) -> None:
+        QMessageBox.about(
+            self,
+            "Acerca de Spidermapp",
+            "Spidermapp 0.2\n\nAuditor de SEO de escritorio: crawler asíncrono, checks técnicos, "
+            "mapa del sitio, informes por área y visibilidad en LLMs.",
+        )

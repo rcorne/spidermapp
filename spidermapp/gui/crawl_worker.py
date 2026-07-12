@@ -12,6 +12,7 @@ from spidermapp.core.models import CrawlConfig, CrawlResult, PageResult
 class CrawlWorker(QThread):
     page_found = Signal(object)  # PageResult
     progress = Signal(int, int)  # done, max_pages
+    status_changed = Signal(str)  # human-readable phase / current URL
     crawl_finished = Signal(object)  # CrawlResult
     crawl_error = Signal(str)
 
@@ -37,9 +38,13 @@ class CrawlWorker(QThread):
         def on_progress(done: int, total: int) -> None:
             self.progress.emit(done, total)
 
+        def on_status(message: str) -> None:
+            self.status_changed.emit(message)
+
         return await crawler.crawl(
             self.config,
             on_page=on_page,
             on_progress=on_progress,
             stop_flag=self._stop_event.is_set,
+            on_status=on_status,
         )

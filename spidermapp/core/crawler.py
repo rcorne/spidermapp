@@ -8,7 +8,7 @@ from urllib.parse import urlparse
 import httpx
 from bs4 import BeautifulSoup
 
-from spidermapp.core import duplicates, html_analysis, issues as issues_mod, render_check, robots, security, sitemap, tech_detect, url_utils
+from spidermapp.core import duplicates, html_analysis, issues as issues_mod, keywords, render_check, robots, security, sitemap, tech_detect, url_utils
 from spidermapp.core.models import (
     CrawlConfig,
     CrawlResult,
@@ -22,6 +22,7 @@ from spidermapp.core.soft_404 import detect_soft_404
 
 OnPage = Callable[[PageResult], Union[Awaitable[None], None]]
 OnProgress = Callable[[int, int], Union[Awaitable[None], None]]
+OnStatus = Callable[[str], Union[Awaitable[None], None]]
 StopFlag = Callable[[], bool]
 
 MAX_REDIRECT_HOPS = 10
@@ -72,13 +73,19 @@ class Crawler:
         self.pages: list[PageResult] = []
         self._browser = None
         self._playwright = None
+        self._on_status: OnStatus | None = None
+
+    async def _status(self, message: str) -> None:
+        await _maybe_await(self._on_status, message)
 
     async def run(
         self,
         on_page: OnPage | None = None,
         on_progress: OnProgress | None = None,
         stop_flag: StopFlag | None = None,
+        on_status: OnStatus | None = None,
     ) -> CrawlResult:
+        self._on_status = on_status
         result = CrawlResult(seed_url=self.config.seed_url)
         semaphore = asyncio.Semaphore(self.config.concurrency)
         headers = {"User-Agent": self.config.user_agent}
@@ -86,18 +93,22 @@ class Crawler:
         async with httpx.AsyncClient(
             headers=headers, timeout=self.config.request_timeout, follow_redirects=False
         ) as client:
+            await self._status("Leyendo robots.txt…")
             robots_info = await self._fetch_robots(client)
             result.site_issues.extend(robots.validate_robots(robots_info, self.config.seed_url))
 
+            await self._status("Leyendo sitemap.xml…")
             sitemap_urls = await self._collect_sitemap_urls(client, robots_info)
             result.sitemap_urls = sitemap_urls
 
             if self.config.render_js:
+                await self._status("Iniciando navegador para renderizado JS…")
                 await self._start_browser()
 
             try:
                 frontier: list[tuple[str, int]] = [(url_utils.normalize_url(self.config.seed_url), 0)]
                 self.visited.add(frontier[0][0])
+                seed_processed = False
 
                 while frontier:
                     if stop_flag and stop_flag():
@@ -136,6 +147,21 @@ class Crawler:
 
                     frontier = next_level + frontier
 
+                    # SPA fallback: the seed's raw HTML had no crawlable links
+                    # (Angular/React shell). Fire up the browser and rediscover
+                    # from the rendered DOM so the crawl doesn't die at 1 page.
+                    if not seed_processed:
+                        seed_processed = True
+                        if not frontier and self._browser is None and self.pages:
+                            seed_page = self.pages[0]
+                            if seed_page.status_code == 200 and not any(l.is_internal for l in seed_page.outlinks):
+                                await self._status(
+                                    "El HTML inicial no tiene enlaces (sitio JavaScript). Activando renderizado automático…"
+                                )
+                                rendered_frontier = await self._auto_render_seed(seed_page)
+                                frontier = rendered_frontier
+
+                await self._status("Buscando páginas huérfanas del sitemap…")
                 await self._crawl_orphans(client, robots_info, semaphore, sitemap_urls, on_page, on_progress)
             finally:
                 if self._browser is not None:
@@ -144,11 +170,48 @@ class Crawler:
             for page in self.pages:
                 page.inlinks = sorted(self.inlinks.get(page.final_url or page.url, set()))
 
+            await self._status("Ejecutando checks a nivel de sitio…")
             await self._run_site_wide_checks(client, result)
 
         result.pages = self.pages
         result.finished_at = time.time()
+        await self._status("Crawl terminado.")
         return result
+
+    async def _auto_render_seed(self, seed_page: PageResult) -> list[tuple[str, int]]:
+        """Start the browser on demand and pull the seed's links from the
+        rendered DOM. Returns the new frontier; empty if Playwright is not
+        available or rendering fails."""
+        try:
+            await self._start_browser()
+        except Exception as exc:  # noqa: BLE001 - playwright not installed / chromium missing
+            seed_page.add_issue(
+                IssueCategory.RENDERING,
+                IssueSeverity.CRITICAL,
+                "spa_render_unavailable",
+                "El sitio necesita JavaScript para mostrar sus enlaces, pero no se pudo iniciar el "
+                f"navegador de renderizado: {exc}. Ejecuta 'playwright install chromium'.",
+            )
+            return []
+
+        rendered_links = await self._run_render_checks(seed_page)
+        seed_page.outlinks = list({l.target: l for l in (seed_page.outlinks + rendered_links)}.values())
+        seed_page.issues = issues_mod.collect_page_issues(seed_page, self.priority_urls)
+
+        frontier: list[tuple[str, int]] = []
+        for link in rendered_links:
+            if not link.is_internal:
+                continue
+            if not self.config.include_subdomains and not url_utils.is_same_site(
+                seed_page.final_url or seed_page.url, link.target, include_subdomains=False
+            ):
+                continue
+            if link.target in self.visited:
+                continue
+            self.visited.add(link.target)
+            self.inlinks.setdefault(link.target, set()).add(seed_page.final_url or seed_page.url)
+            frontier.append((link.target, 1))
+        return frontier
 
     async def _fetch_robots(self, client: httpx.AsyncClient) -> robots.RobotsInfo:
         robots_url = robots.robots_url_for(self.config.seed_url)
@@ -266,6 +329,7 @@ class Crawler:
                 )
                 return page, []
 
+            await self._status(f"Rastreando {url}")
             start = time.monotonic()
             response, chain, error = await _fetch_with_redirect_chain(client, url)
             fetch_time_ms = (time.monotonic() - start) * 1000
@@ -301,13 +365,19 @@ class Crawler:
                 page.content_hash = analysis.content_hash
                 page.outlinks = analysis.outlinks
                 page.tech = tech_detect.detect_tech(html, page.headers)
+                page.meta_keywords = analysis.meta_keywords
+                page.images_without_alt = analysis.images_without_alt
+                page.empty_anchors = analysis.empty_anchors
+                page.keywords = keywords.extract_keywords(
+                    analysis.title, analysis.h1, analysis.meta_description, analysis.visible_text
+                )
 
-                visible_text = _visible_text(html)
+                visible_text = analysis.visible_text
                 page.is_soft_404 = detect_soft_404(page.status_code, page.title, visible_text, page.word_count)
 
                 outlinks_for_discovery = list(analysis.outlinks)
 
-                if self.config.render_js and self._browser is not None:
+                if self._browser is not None:
                     rendered_outlinks = await self._run_render_checks(page)
                     seen_targets = {link.target for link in outlinks_for_discovery}
                     for link in rendered_outlinks:
@@ -369,6 +439,14 @@ class Crawler:
         crawled_urls = [p.final_url or p.url for p in self.pages if p.status_code is not None]
         result.site_issues.extend(url_utils.check_site_wide_url_consistency(crawled_urls))
 
+        sitemap_set = {url_utils.normalize_url(u) for u in result.sitemap_urls}
+        sitemap_has_urls = bool(sitemap_set)
+        for page in self.pages:
+            page.in_sitemap = page.url in sitemap_set or (page.final_url or page.url) in sitemap_set
+            page.issues.extend(
+                html_analysis.check_sitemap_membership(page.in_sitemap, sitemap_has_urls, page.is_indexable)
+            )
+
         status_by_url = {(p.final_url or p.url): p.status_code for p in self.pages if p.status_code is not None}
         result.site_issues.extend(
             sitemap.validate_sitemap_urls(
@@ -422,6 +500,7 @@ async def crawl(
     on_page: OnPage | None = None,
     on_progress: OnProgress | None = None,
     stop_flag: StopFlag | None = None,
+    on_status: OnStatus | None = None,
 ) -> CrawlResult:
     crawler = Crawler(config)
-    return await crawler.run(on_page=on_page, on_progress=on_progress, stop_flag=stop_flag)
+    return await crawler.run(on_page=on_page, on_progress=on_progress, stop_flag=stop_flag, on_status=on_status)

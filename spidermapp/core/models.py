@@ -109,6 +109,11 @@ class PageResult:
     content_hash: str = ""
     is_soft_404: bool = False
     is_orphan: bool = False
+    in_sitemap: bool = False
+    meta_keywords: str = ""
+    images_without_alt: int = 0
+    empty_anchors: int = 0
+    keywords: list[str] = field(default_factory=list)
 
     tls: TlsInfo | None = None
     tech: list[str] = field(default_factory=list)

@@ -37,6 +37,7 @@ def test_collect_page_issues_healthy_page_has_no_issues():
         title="Un título de longitud razonable y correcta",
         meta_description="Una meta description con longitud suficiente para pasar los checks de tamaño mínimo y máximo permitido.",
         h1=["Encabezado principal"],
+        h2=["Subtítulo de sección"],
         word_count=500,
     )
     assert issues.collect_page_issues(page) == []

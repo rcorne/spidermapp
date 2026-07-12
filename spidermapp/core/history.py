@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
 
-from spidermapp.core.models import CrawlResult
+from spidermapp.core.models import CrawlResult, Issue, IssueCategory, IssueSeverity, PageResult
 
 HISTORY_DIR = Path.home() / ".spidermapp" / "history"
 
@@ -56,6 +56,49 @@ def _snapshot_from_result(result: CrawlResult, timestamp: float | None = None) -
     )
 
 
+def _page_to_dict(page: PageResult) -> dict:
+    return {
+        "url": page.url,
+        "status_code": page.status_code,
+        "final_url": page.final_url,
+        "redirect_chain": [list(hop) for hop in page.redirect_chain],
+        "content_type": page.content_type,
+        "depth": page.depth,
+        "fetch_time_ms": page.fetch_time_ms,
+        "title": page.title,
+        "meta_description": page.meta_description,
+        "h1": page.h1,
+        "h2": page.h2,
+        "canonical": page.canonical,
+        "meta_robots": page.meta_robots,
+        "x_robots_tag": page.x_robots_tag,
+        "word_count": page.word_count,
+        "inlinks": page.inlinks,
+        "content_hash": page.content_hash,
+        "is_soft_404": page.is_soft_404,
+        "is_orphan": page.is_orphan,
+        "in_sitemap": page.in_sitemap,
+        "meta_keywords": page.meta_keywords,
+        "images_without_alt": page.images_without_alt,
+        "empty_anchors": page.empty_anchors,
+        "keywords": page.keywords,
+        "tech": page.tech,
+        "error": page.error,
+        "issues": [[i.category.value, i.severity.value, i.code, i.message] for i in page.issues],
+    }
+
+
+def _page_from_dict(data: dict) -> PageResult:
+    issues_raw = data.pop("issues", [])
+    redirect_chain = [tuple(hop) for hop in data.pop("redirect_chain", [])]
+    page = PageResult(redirect_chain=redirect_chain, **data)
+    for category, severity, code, message in issues_raw:
+        page.issues.append(
+            Issue(IssueCategory(category), IssueSeverity(severity), code, message)
+        )
+    return page
+
+
 def save_crawl(result: CrawlResult, history_dir: Path = HISTORY_DIR) -> Path:
     snapshot = _snapshot_from_result(result)
     domain_dir = history_dir / _domain_key(result.seed_url)
@@ -68,8 +111,11 @@ def save_crawl(result: CrawlResult, history_dir: Path = HISTORY_DIR) -> Path:
                 "timestamp": snapshot.timestamp,
                 "pages": snapshot.pages,
                 "status_by_url": snapshot.status_by_url,
+                "site_issues": [
+                    [i.category.value, i.severity.value, i.code, i.message] for i in result.site_issues
+                ],
+                "pages_full": [_page_to_dict(p) for p in result.pages],
             },
-            indent=2,
         )
     )
     return path
@@ -82,9 +128,52 @@ def list_snapshots(seed_url: str, history_dir: Path = HISTORY_DIR) -> list[Path]
     return sorted(domain_dir.glob("*.json"))
 
 
+def list_all_snapshots(history_dir: Path = HISTORY_DIR) -> list[dict]:
+    """Every saved crawl across all domains, newest first, with light metadata
+    (does not parse the full page payloads)."""
+    entries: list[dict] = []
+    if not history_dir.exists():
+        return entries
+    for path in history_dir.glob("*/*.json"):
+        try:
+            data = json.loads(path.read_text())
+        except (json.JSONDecodeError, OSError):
+            continue
+        entries.append(
+            {
+                "path": path,
+                "seed_url": data.get("seed_url", ""),
+                "timestamp": data.get("timestamp", 0.0),
+                "page_count": len(data.get("pages", {})),
+                "has_full": bool(data.get("pages_full")),
+            }
+        )
+    entries.sort(key=lambda e: e["timestamp"], reverse=True)
+    return entries
+
+
 def load_snapshot(path: Path) -> CrawlSnapshot:
     data = json.loads(path.read_text())
-    return CrawlSnapshot(**data)
+    return CrawlSnapshot(
+        seed_url=data["seed_url"],
+        timestamp=data["timestamp"],
+        pages=data["pages"],
+        status_by_url=data["status_by_url"],
+    )
+
+
+def load_full_crawl(path: Path) -> CrawlResult | None:
+    """Rebuild a complete CrawlResult from a saved snapshot, or None if the
+    snapshot predates full-page storage."""
+    data = json.loads(path.read_text())
+    pages_full = data.get("pages_full")
+    if not pages_full:
+        return None
+    result = CrawlResult(seed_url=data["seed_url"], started_at=data["timestamp"], finished_at=data["timestamp"])
+    result.pages = [_page_from_dict(p) for p in pages_full]
+    for category, severity, code, message in data.get("site_issues", []):
+        result.site_issues.append(Issue(IssueCategory(category), IssueSeverity(severity), code, message))
+    return result
 
 
 def load_previous_snapshot(

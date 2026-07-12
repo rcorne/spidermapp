@@ -203,3 +203,66 @@ async def test_crawl_detects_orphan_pages_from_sitemap(monkeypatch):
 
     non_orphan = next(p for p in result.pages if p.url == "https://example.test/about")
     assert not non_orphan.is_orphan
+
+
+async def test_crawl_auto_renders_when_raw_html_has_no_links(monkeypatch):
+    """Point-11 regression: user enters an SPA URL WITHOUT checking
+    "Renderizar JS" — the crawler must notice the raw HTML has zero links,
+    start the browser by itself, and keep crawling from the rendered DOM."""
+
+    spa_shell = (
+        "<html><head><title>Tienda SPA de prueba con titulo</title>"
+        '<meta name="description" content="Descripción suficientemente larga para pasar el check de la tienda SPA."></head>'
+        "<body><app-root></app-root></body></html>"
+    )
+    inner_page = (
+        "<html><head><title>Categoría interna de la tienda SPA</title></head>"
+        "<body><h1>Categoría</h1></body></html>"
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path in ("/robots.txt", "/sitemap.xml"):
+            return httpx.Response(404)
+        if request.url.path == "/":
+            return httpx.Response(200, content=spa_shell, headers={"content-type": "text/html"})
+        return httpx.Response(200, content=inner_page, headers={"content-type": "text/html"})
+
+    transport = httpx.MockTransport(handler)
+
+    def patched_client(*args, **kwargs):
+        kwargs["transport"] = transport
+        return _REAL_ASYNC_CLIENT(*args, **kwargs)
+
+    monkeypatch.setattr(crawler_mod.httpx, "AsyncClient", patched_client)
+
+    started = {"browser": False}
+
+    async def fake_start_browser(self):
+        started["browser"] = True
+        self._browser = object()
+
+    async def fake_stop_browser(self):
+        self._browser = None
+
+    async def fake_render_with_browser(browser, url, viewport, user_agent=None, timeout_ms=15000):
+        if url.rstrip("/") == "https://spa.test":
+            html = (
+                "<html><head><title>Tienda SPA de prueba con titulo</title></head><body>"
+                '<a href="/categoria-1">Cat 1</a><a href="/categoria-2">Cat 2</a></body></html>'
+            )
+        else:
+            html = inner_page
+        return render_check.RenderedPage(html=html, lcp_ms=100, cls=0.0, fcp_ms=80)
+
+    monkeypatch.setattr(crawler_mod.Crawler, "_start_browser", fake_start_browser)
+    monkeypatch.setattr(crawler_mod.Crawler, "_stop_browser", fake_stop_browser)
+    monkeypatch.setattr(crawler_mod.render_check, "render_with_browser", fake_render_with_browser)
+
+    config = CrawlConfig(seed_url="https://spa.test/", max_pages=50, render_js=False)
+    result = await crawler_mod.crawl(config)
+
+    urls = {p.url for p in result.pages}
+    assert started["browser"], "the crawler should have auto-started the browser"
+    assert "https://spa.test/categoria-1" in urls
+    assert "https://spa.test/categoria-2" in urls
+    assert len(result.pages) >= 3

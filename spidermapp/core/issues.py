@@ -69,9 +69,12 @@ def collect_page_issues(page: PageResult, priority_urls: set[str] | None = None)
         found.extend(html_analysis.check_title(page.title))
         found.extend(html_analysis.check_meta_description(page.meta_description))
         found.extend(html_analysis.check_h1(page.h1))
+        found.extend(html_analysis.check_h2(page.h2))
         found.extend(html_analysis.check_directives(page.meta_robots, page.x_robots_tag))
         found.extend(html_analysis.check_canonical(page.canonical, page.url, page.final_url, page.url in priority_urls))
         found.extend(html_analysis.check_thin_content(page.word_count))
+        found.extend(html_analysis.check_images_alt(page.images_without_alt))
+        found.extend(html_analysis.check_empty_anchors(page.empty_anchors))
 
     found.extend(check_soft_404(page.is_soft_404))
 

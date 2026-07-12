@@ -18,6 +18,8 @@ COLUMNS = [
     ("Palabras", "word_count"),
     ("Canonical", "canonical"),
     ("Profundidad", "depth"),
+    ("Keywords objetivo", "keywords"),
+    ("En sitemap", "in_sitemap"),
     ("Tecnología", "tech"),
     ("Issues", "issue_count"),
     ("Máx. severidad", "max_severity"),
@@ -113,6 +115,10 @@ class PageTableModel(QAbstractTableModel):
             return page.canonical
         if key == "depth":
             return page.depth
+        if key == "keywords":
+            return ", ".join(page.keywords)
+        if key == "in_sitemap":
+            return "Sí" if page.in_sitemap else "No"
         if key == "tech":
             return ", ".join(page.tech)
         if key == "issue_count":
