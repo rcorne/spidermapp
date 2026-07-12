@@ -87,6 +87,6 @@ en modo "lab" (Playwright, no CrUX real).
 ## Fuera de alcance en v1 (pendiente para v2)
 
 Todo lo que depende de la API de Google Search Console (cobertura de índice, confirmación de
-sitemap enviado, fuentes de tráfico) — requiere que crees credenciales OAuth en Google Cloud
+sitemap enviado, fuentes de tráfico) — requiere que se creen credenciales OAuth en Google Cloud
 Console. Ver [`spidermapp/gsc/client.py`](spidermapp/gsc/client.py) para los pasos de setup y el
 punto de extensión ya preparado.
