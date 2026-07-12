@@ -108,6 +108,7 @@ class PageResult:
 
     content_hash: str = ""
     is_soft_404: bool = False
+    is_orphan: bool = False
 
     tls: TlsInfo | None = None
     tech: list[str] = field(default_factory=list)
@@ -142,3 +143,6 @@ class CrawlResult:
     started_at: float = field(default_factory=time.time)
     finished_at: float | None = None
     stopped_early: bool = False
+    duplicate_content_groups: dict[str, list[str]] = field(default_factory=dict)
+    duplicate_title_groups: dict[str, list[str]] = field(default_factory=dict)
+    duplicate_meta_groups: dict[str, list[str]] = field(default_factory=dict)

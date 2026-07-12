@@ -135,6 +135,8 @@ class Crawler:
                             next_level.append((link_url, depth))
 
                     frontier = next_level + frontier
+
+                await self._crawl_orphans(client, robots_info, semaphore, sitemap_urls, on_page, on_progress)
             finally:
                 if self._browser is not None:
                     await self._stop_browser()
@@ -184,6 +186,52 @@ class Crawler:
                 collected.extend(parsed.urls)
 
         return collected
+
+    async def _crawl_orphans(
+        self,
+        client: httpx.AsyncClient,
+        robots_info: robots.RobotsInfo,
+        semaphore: asyncio.Semaphore,
+        sitemap_urls: list[str],
+        on_page: OnPage | None,
+        on_progress: OnProgress | None,
+    ) -> None:
+        """Fetch sitemap URLs that were never reached by following internal
+        links. These are orphan pages: real, indexable-looking URLs with zero
+        internal inlinks, invisible in a plain crawl but real crawl-budget/
+        indexation risks."""
+        remaining_budget = self.config.max_pages - len(self.pages)
+        if remaining_budget <= 0:
+            return
+
+        candidates: list[str] = []
+        for raw_url in sitemap_urls:
+            normalized = url_utils.normalize_url(raw_url)
+            if normalized in self.visited:
+                continue
+            if not url_utils.is_same_site(normalized, self.config.seed_url, include_subdomains=self.config.include_subdomains):
+                continue
+            self.visited.add(normalized)
+            candidates.append(normalized)
+            if len(candidates) >= remaining_budget:
+                break
+
+        if not candidates:
+            return
+
+        tasks = [self._process_url(client, robots_info, semaphore, url, depth=0) for url in candidates]
+        processed = await asyncio.gather(*tasks)
+        for page, _discovered in processed:
+            page.is_orphan = True
+            page.add_issue(
+                IssueCategory.LINKS,
+                IssueSeverity.WARNING,
+                "orphan_page",
+                "Página encontrada en el sitemap pero sin ningún enlace interno hacia ella.",
+            )
+            self.pages.append(page)
+            await _maybe_await(on_page, page)
+            await _maybe_await(on_progress, len(self.pages), self.config.max_pages)
 
     async def _start_browser(self) -> None:
         from playwright.async_api import async_playwright
@@ -339,6 +387,9 @@ class Crawler:
         dup_meta = duplicates.find_duplicate_meta_descriptions(meta_pairs)
         for page in self.pages:
             page.issues.extend(duplicates.issues_for_url(page.url, dup_content, dup_titles, dup_meta))
+        result.duplicate_content_groups = dup_content
+        result.duplicate_title_groups = dup_titles
+        result.duplicate_meta_groups = dup_meta
 
         await self._check_https_and_tls(client, result)
 

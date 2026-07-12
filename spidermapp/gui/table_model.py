@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, QSortFilterProxyModel, Qt
+from PySide6.QtGui import QColor
 
 from spidermapp.core.models import IssueCategory, IssueSeverity, PageResult
+from spidermapp.gui import theme
 
 COLUMNS = [
     ("URL", "url"),
@@ -23,11 +25,18 @@ COLUMNS = [
 
 _SEVERITY_ORDER = {IssueSeverity.CRITICAL: 3, IssueSeverity.WARNING: 2, IssueSeverity.INFO: 1}
 _SEVERITY_LABEL = {IssueSeverity.CRITICAL: "Crítico", IssueSeverity.WARNING: "Advertencia", IssueSeverity.INFO: "Info"}
-_SEVERITY_COLOR = {
-    IssueSeverity.CRITICAL: Qt.GlobalColor.red,
-    IssueSeverity.WARNING: Qt.GlobalColor.darkYellow,
-    IssueSeverity.INFO: Qt.GlobalColor.darkGray,
+_SEVERITY_TEXT_COLOR = {
+    IssueSeverity.CRITICAL: QColor(theme.CRITICAL_HEX),
+    IssueSeverity.WARNING: QColor(theme.WARNING_HEX),
+    IssueSeverity.INFO: QColor(theme.INFO_HEX),
 }
+_SEVERITY_ROW_TINT = {
+    IssueSeverity.CRITICAL: QColor(254, 242, 242),
+    IssueSeverity.WARNING: QColor(255, 251, 235),
+    IssueSeverity.INFO: QColor(239, 246, 255),
+}
+_GOOD_TEXT_COLOR = QColor(theme.GOOD_HEX)
+_CRITICAL_TEXT_COLOR = QColor(theme.CRITICAL_HEX)
 
 
 def _max_severity(page: PageResult) -> IssueSeverity | None:
@@ -63,15 +72,27 @@ class PageTableModel(QAbstractTableModel):
 
         if role == Qt.ItemDataRole.DisplayRole:
             return self._display_value(page, key)
-        if role == Qt.ItemDataRole.ForegroundRole and key == "max_severity":
+
+        if role == Qt.ItemDataRole.BackgroundRole:
             severity = _max_severity(page)
             if severity is not None:
-                return _SEVERITY_COLOR[severity]
+                return _SEVERITY_ROW_TINT[severity]
+            return None
+
+        if role == Qt.ItemDataRole.ForegroundRole:
+            if key == "max_severity":
+                severity = _max_severity(page)
+                if severity is not None:
+                    return _SEVERITY_TEXT_COLOR[severity]
+            if key == "indexable":
+                return _GOOD_TEXT_COLOR if page.is_indexable else _CRITICAL_TEXT_COLOR
+
         return None
 
     def _display_value(self, page: PageResult, key: str):
         if key == "url":
-            return page.url
+            prefix = "🕸 " if page.is_orphan else ""
+            return prefix + page.url
         if key == "status_code":
             return page.status_code if page.status_code is not None else "—"
         if key == "indexable":
@@ -98,7 +119,7 @@ class PageTableModel(QAbstractTableModel):
             return len(page.issues)
         if key == "max_severity":
             severity = _max_severity(page)
-            return _SEVERITY_LABEL[severity] if severity else ""
+            return _SEVERITY_LABEL[severity] if severity else "Sin issues"
         return ""
 
     def page_at(self, row: int) -> PageResult | None:
@@ -132,8 +153,9 @@ class PageTableModel(QAbstractTableModel):
 
 
 class IssueFilterProxyModel(QSortFilterProxyModel):
-    """Filters rows by sidebar selection: "all" pages, only pages with any
-    issue, or pages with an issue in a specific IssueCategory."""
+    """Filters rows by sidebar selection: all pages, only pages with any
+    issue, orphan pages, duplicate-content pages, or pages with an issue in
+    a specific IssueCategory."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -151,6 +173,16 @@ class IssueFilterProxyModel(QSortFilterProxyModel):
         self._category = None
         self.invalidateFilter()
 
+    def set_filter_orphans(self) -> None:
+        self._mode = "orphans"
+        self._category = None
+        self.invalidateFilter()
+
+    def set_filter_duplicates(self) -> None:
+        self._mode = "duplicates"
+        self._category = IssueCategory.DUPLICATES
+        self.invalidateFilter()
+
     def set_filter_category(self, category: IssueCategory) -> None:
         self._mode = "category"
         self._category = category
@@ -165,6 +197,8 @@ class IssueFilterProxyModel(QSortFilterProxyModel):
             return True
         if self._mode == "issues":
             return len(page.issues) > 0
-        if self._mode == "category":
+        if self._mode == "orphans":
+            return page.is_orphan
+        if self._mode in ("category", "duplicates"):
             return any(i.category == self._category for i in page.issues)
         return True

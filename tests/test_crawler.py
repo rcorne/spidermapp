@@ -5,6 +5,10 @@ from spidermapp.core import crawler as crawler_mod
 from spidermapp.core import render_check, security
 from spidermapp.core.models import CrawlConfig, TlsInfo
 
+# Captured before any test monkeypatches crawler_mod.httpx.AsyncClient, so tests
+# that install their own transport don't accidentally chain through each other's.
+_REAL_ASYNC_CLIENT = httpx.AsyncClient
+
 PAGE_HOME = """
 <html><head><title>Inicio del sitio de prueba</title>
 <meta name="description" content="Descripción de la página de inicio con longitud suficiente para el check."></head>
@@ -58,11 +62,10 @@ def _no_real_tls(monkeypatch):
 @pytest.fixture(autouse=True)
 def _mock_transport(monkeypatch):
     transport = httpx.MockTransport(_handler)
-    original_client = httpx.AsyncClient
 
     def patched_client(*args, **kwargs):
         kwargs["transport"] = transport
-        return original_client(*args, **kwargs)
+        return _REAL_ASYNC_CLIENT(*args, **kwargs)
 
     monkeypatch.setattr(crawler_mod.httpx, "AsyncClient", patched_client)
 
@@ -149,3 +152,54 @@ async def test_crawl_with_render_js_discovers_links_only_in_rendered_dom(monkeyp
     urls = {p.url for p in result.pages}
     assert "https://example.test/rendered-only" in urls
     assert "https://example.test/about" in urls
+
+
+async def test_crawl_detects_orphan_pages_from_sitemap(monkeypatch):
+    """A URL that's in the sitemap but never linked from any crawled page
+    should still be fetched and flagged as orphan, with zero inlinks."""
+
+    sitemap_xml = """<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://example.test/</loc></url>
+  <url><loc>https://example.test/about</loc></url>
+  <url><loc>https://example.test/orphan-page</loc></url>
+</urlset>"""
+
+    orphan_html = "<html><head><title>Huérfana</title></head><body><h1>Sola</h1></body></html>"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = request.url
+        if url.path == "/robots.txt":
+            return httpx.Response(
+                200,
+                content="Sitemap: https://example.test/sitemap.xml\n",
+                headers={"content-type": "text/plain"},
+            )
+        if url.path == "/sitemap.xml":
+            return httpx.Response(200, content=sitemap_xml, headers={"content-type": "application/xml"})
+        if url.path == "/":
+            return httpx.Response(200, content=PAGE_HOME, headers={"content-type": "text/html"})
+        if url.path == "/about":
+            return httpx.Response(200, content=PAGE_ABOUT, headers={"content-type": "text/html"})
+        if url.path == "/orphan-page":
+            return httpx.Response(200, content=orphan_html, headers={"content-type": "text/html"})
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+
+    def patched_client(*args, **kwargs):
+        kwargs["transport"] = transport
+        return _REAL_ASYNC_CLIENT(*args, **kwargs)
+
+    monkeypatch.setattr(crawler_mod.httpx, "AsyncClient", patched_client)
+
+    config = CrawlConfig(seed_url="https://example.test/", max_pages=50)
+    result = await crawler_mod.crawl(config)
+
+    orphan = next(p for p in result.pages if p.url == "https://example.test/orphan-page")
+    assert orphan.is_orphan
+    assert orphan.inlinks == []
+    assert any(i.code == "orphan_page" for i in orphan.issues)
+
+    non_orphan = next(p for p in result.pages if p.url == "https://example.test/about")
+    assert not non_orphan.is_orphan

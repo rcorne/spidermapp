@@ -1,0 +1,82 @@
+from spidermapp.core import stats
+from spidermapp.core.models import IssueCategory, IssueSeverity, PageResult
+
+
+def _page(url, status=200, issues=None, is_orphan=False):
+    page = PageResult(url=url, status_code=status, is_orphan=is_orphan)
+    for category, severity, code in issues or []:
+        page.add_issue(category, severity, code, "msg")
+    return page
+
+
+def test_health_score_perfect_site_is_100():
+    pages = [_page("https://x.com/a"), _page("https://x.com/b")]
+    assert stats.health_score(pages) == 100
+
+
+def test_health_score_drops_with_critical_issues():
+    pages = [
+        _page("https://x.com/a", issues=[(IssueCategory.RESPONSE_CODES, IssueSeverity.CRITICAL, "error_404")]),
+        _page("https://x.com/b"),
+    ]
+    assert stats.health_score(pages) < 100
+
+
+def test_health_score_weighs_priority_urls_more_heavily():
+    issue = [(IssueCategory.CANONICALS, IssueSeverity.WARNING, "canonical_points_elsewhere")]
+    pages_normal = [_page("https://x.com/a", issues=issue)]
+    pages_priority = [_page("https://x.com/a", issues=issue)]
+    score_normal = stats.health_score(pages_normal)
+    score_priority = stats.health_score(pages_priority, priority_urls={"https://x.com/a"})
+    assert score_priority < score_normal
+
+
+def test_health_score_no_crawled_pages_is_100():
+    assert stats.health_score([]) == 100
+
+
+def test_category_breakdown_counts_by_severity():
+    pages = [
+        _page("https://x.com/a", issues=[(IssueCategory.TITLES, IssueSeverity.CRITICAL, "title_missing")]),
+        _page("https://x.com/b", issues=[(IssueCategory.TITLES, IssueSeverity.WARNING, "title_too_long")]),
+    ]
+    breakdown = stats.category_breakdown(pages)
+    titles = next(b for b in breakdown if b.category == IssueCategory.TITLES)
+    assert titles.critical == 1
+    assert titles.warning == 1
+    assert titles.total == 2
+
+
+def test_category_breakdown_excludes_empty_categories():
+    pages = [_page("https://x.com/a")]
+    assert stats.category_breakdown(pages) == []
+
+
+def test_top_offenders_sorted_by_weighted_severity():
+    pages = [
+        _page("https://x.com/light", issues=[(IssueCategory.META, IssueSeverity.INFO, "thin_content")]),
+        _page(
+            "https://x.com/heavy",
+            issues=[
+                (IssueCategory.RESPONSE_CODES, IssueSeverity.CRITICAL, "error_404"),
+                (IssueCategory.CANONICALS, IssueSeverity.CRITICAL, "canonical_points_elsewhere"),
+            ],
+        ),
+    ]
+    top = stats.top_offenders(pages, limit=2)
+    assert top[0].url == "https://x.com/heavy"
+
+
+def test_compute_crawl_budget_categorizes_pages():
+    pages = [
+        _page("https://x.com/ok"),
+        _page("https://x.com/error", status=500),
+        _page("https://x.com/dup", issues=[(IssueCategory.DUPLICATES, IssueSeverity.CRITICAL, "duplicate_content")]),
+        _page("https://x.com/orphan", is_orphan=True),
+    ]
+    pages[2].add_issue(IssueCategory.SITEMAP_ROBOTS, IssueSeverity.INFO, "blocked_by_robots", "msg")
+    budget = stats.compute_crawl_budget(pages)
+    assert budget.total_pages == 4
+    assert budget.error_pages == 1
+    assert budget.blocked_by_robots == 1
+    assert budget.orphan_pages == 1
