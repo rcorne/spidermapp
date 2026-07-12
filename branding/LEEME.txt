@@ -1,0 +1,25 @@
+SPIDERMAPP — ASSETS DE LOGO
+============================
+
+Contenido de esta carpeta:
+
+source/     Archivos vectoriales maestros (SVG). Editables, fuente de verdad
+            para regenerar cualquier otro asset.
+
+png/        Ícono exportado en 8 resoluciones (16 a 1024px) para uso general
+            (web, docs, marketing, README).
+
+macos/      Todo lo necesario para empaquetar la app en macOS:
+            - AppIcon.icns (ícono nativo, listo para el .app bundle)
+            - AppIcon.iconset/ (PNGs fuente que generaron el .icns)
+            - dmg-background.png y @2x (fondo del instalador .dmg)
+
+windows/    spidermapp.ico multi-resolución para el ejecutable / instalador
+            de Windows.
+
+github/     Assets listos para el repositorio: SVGs, PNG 512, favicon.ico
+            y la imagen social-preview.png (para Settings > Social preview
+            del repo de GitHub).
+
+Ver Spidermapp-Assets-Resumen.pdf para el detalle de cada archivo y cómo
+integrarlo en el pipeline de build.

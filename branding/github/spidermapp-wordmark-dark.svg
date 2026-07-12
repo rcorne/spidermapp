@@ -1,4 +1,6 @@
-<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+<svg width="760" height="220" viewBox="0 0 760 220" xmlns="http://www.w3.org/2000/svg">
+<rect x="0" y="0" width="760" height="220" fill="#111827"/>
+<g transform="translate(40,30) scale(0.3125)">
 <defs>
 <linearGradient id="bg" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
 <stop offset="0" stop-color="#4338CA"/>
@@ -15,4 +17,6 @@
 <circle cx="408.0" cy="256.0" r="7.5" fill="#FFFFFF"/><circle cx="363.5" cy="363.5" r="7.5" fill="#FFFFFF"/><circle cx="256.0" cy="408.0" r="7.5" fill="#FFFFFF"/><circle cx="148.5" cy="363.5" r="7.5" fill="#FFFFFF"/><circle cx="104.0" cy="256.0" r="7.5" fill="#FFFFFF"/><circle cx="148.5" cy="148.5" r="7.5" fill="#FFFFFF"/><circle cx="256.0" cy="104.0" r="7.5" fill="#FFFFFF"/><circle cx="363.5" cy="148.5" r="7.5" fill="#FFFFFF"/>
 <rect x="232" y="232" width="48" height="48" rx="10" transform="rotate(45 256 256)" fill="#EEF2FF" stroke="url(#leg)" stroke-width="5"/>
 <circle cx="256" cy="256" r="6" fill="#4338CA"/>
+</g>
+<text x="234" y="132" font-family="Helvetica, Arial, sans-serif" font-size="58" font-weight="600" fill="#F5F3FF" letter-spacing="-1">spidermapp</text>
 </svg>
