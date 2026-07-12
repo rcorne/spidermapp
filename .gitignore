@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+*.csv
+*.xlsx
+packaging/*.dmg
+packaging/dmg_staging/
+packaging/icon/Spidermapp.iconset/
+packaging/icon/preview_*.png

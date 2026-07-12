@@ -1,0 +1,69 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#5B2CE0"/>
+      <stop offset="55%" stop-color="#2F6FE0"/>
+      <stop offset="100%" stop-color="#17D6C0"/>
+    </linearGradient>
+    <radialGradient id="glass" cx="42%" cy="38%" r="65%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95"/>
+      <stop offset="55%" stop-color="#eaf6ff" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#eaf6ff" stop-opacity="0.12"/>
+    </radialGradient>
+    <linearGradient id="handle" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="100%" stop-color="#D9E9FF"/>
+    </linearGradient>
+    <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#0B1A3A" flood-opacity="0.35"/>
+    </filter>
+  </defs>
+
+  <!-- macOS-style rounded square background -->
+  <rect x="0" y="0" width="1024" height="1024" rx="228" ry="228" fill="url(#bg)"/>
+
+  <!-- subtle inner highlight -->
+  <rect x="0" y="0" width="1024" height="1024" rx="228" ry="228" fill="none" stroke="#ffffff" stroke-opacity="0.08" stroke-width="4"/>
+
+  <g filter="url(#soft)">
+    <!-- spider legs trailing behind the lens, evenly spread, clear of the handle -->
+    <g stroke="#0E1730" stroke-width="28" stroke-linecap="round" fill="none" opacity="0.92">
+      <path d="M 400 747 Q 334 807 374 895"/>
+      <path d="M 216 637 Q 127 636 97 729"/>
+      <path d="M 153 431 Q 87 371 3 421"/>
+      <path d="M 244 236 Q 235 148 139 128"/>
+      <path d="M 442 152 Q 494 80 436 2"/>
+      <path d="M 645 222 Q 732 204 741 107"/>
+    </g>
+
+    <!-- magnifying-glass handle -->
+    <rect x="606" y="600" width="230" height="72" rx="36" transform="rotate(45 606 600)" fill="url(#handle)"/>
+
+    <!-- magnifying-glass lens: doubles as the spider's body, web pattern = site map -->
+    <circle cx="452" cy="452" r="308" fill="url(#glass)" stroke="#0E1730" stroke-width="30"/>
+    <circle cx="452" cy="452" r="308" fill="none" stroke="#ffffff" stroke-opacity="0.5" stroke-width="4"/>
+
+    <!-- web / crawl-map lines inside the lens -->
+    <g stroke="#0E1730" stroke-width="10" stroke-linecap="round" opacity="0.85">
+      <line x1="452" y1="452" x2="452" y2="220"/>
+      <line x1="452" y1="452" x2="620" y2="300"/>
+      <line x1="452" y1="452" x2="670" y2="452"/>
+      <line x1="452" y1="452" x2="620" y2="610"/>
+      <line x1="452" y1="452" x2="452" y2="684"/>
+      <line x1="452" y1="452" x2="284" y2="610"/>
+      <line x1="452" y1="452" x2="234" y2="452"/>
+      <line x1="452" y1="452" x2="284" y2="300"/>
+
+      <path d="M 452 330 L 566 372 L 566 532 L 452 574 L 338 532 L 338 372 Z" fill="none"/>
+      <path d="M 452 260 L 616 330 L 616 574 L 452 644 L 288 574 L 288 330 Z" fill="none"/>
+    </g>
+
+    <!-- crawled-page nodes along the web -->
+    <circle cx="452" cy="220" r="20" fill="#0E1730"/>
+    <circle cx="620" cy="300" r="20" fill="#0E1730"/>
+    <circle cx="670" cy="452" r="20" fill="#0E1730"/>
+    <circle cx="284" cy="300" r="20" fill="#0E1730"/>
+    <circle cx="284" cy="610" r="22" fill="#FF5A5F"/>
+    <circle cx="452" cy="452" r="26" fill="#17D6C0" stroke="#0E1730" stroke-width="8"/>
+  </g>
+</svg>
