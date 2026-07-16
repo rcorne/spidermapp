@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from spidermapp.core.models import IssueCategory, IssueSeverity, PageResult
+from spidermapp.core.models import Issue, IssueCategory, IssueSeverity, PageResult
 
 SEVERITY_WEIGHT = {IssueSeverity.CRITICAL: 10, IssueSeverity.WARNING: 3, IssueSeverity.INFO: 1}
 PRIORITY_URL_MULTIPLIER = 1.6
@@ -91,3 +91,67 @@ def compute_crawl_budget(pages: list[PageResult]) -> CrawlBudget:
         if page.is_orphan:
             budget.orphan_pages += 1
     return budget
+
+
+@dataclass
+class IssueOpportunity:
+    """One class of fixable issue, aggregated across every page it affects —
+    the SEO-audit equivalent of a prioritized to-do item rather than a
+    per-page complaint."""
+
+    code: str
+    category: IssueCategory
+    severity: IssueSeverity
+    affected_pages: int
+
+
+def find_opportunities(pages: list[PageResult], limit: int = 8) -> list[IssueOpportunity]:
+    """Group issues by type (not by page) so the same fix, once applied,
+    is understood to resolve every affected URL at once — mirrors how
+    tools like Semrush/Screaming Frog present site-wide findings."""
+    by_code: dict[str, IssueOpportunity] = {}
+    for page in pages:
+        seen_codes: set[str] = set()
+        for issue in page.issues:
+            if issue.code in seen_codes:
+                continue
+            seen_codes.add(issue.code)
+            opportunity = by_code.get(issue.code)
+            if opportunity is None:
+                by_code[issue.code] = IssueOpportunity(issue.code, issue.category, issue.severity, 1)
+            else:
+                opportunity.affected_pages += 1
+
+    ranked = list(by_code.values())
+    ranked.sort(key=lambda o: SEVERITY_WEIGHT[o.severity] * o.affected_pages, reverse=True)
+    return ranked[:limit]
+
+
+@dataclass
+class SiteInfrastructure:
+    robots_found: bool = False
+    robots_allows_crawling: bool = True
+    robots_declares_sitemap: bool = True
+    sitemap_found: bool = False
+    sitemap_url_count: int = 0
+    other_findings: list[Issue] = field(default_factory=list)
+
+
+_STRUCTURE_CODES = {
+    "robots_missing",
+    "robots_blocks_everything",
+    "robots_no_sitemap_directive",
+    "sitemap_empty",
+}
+
+
+def summarize_site_infrastructure(sitemap_urls: list[str], site_issues: list[Issue]) -> SiteInfrastructure:
+    codes = {issue.code for issue in site_issues}
+    return SiteInfrastructure(
+        robots_found="robots_missing" not in codes,
+        robots_allows_crawling="robots_blocks_everything" not in codes,
+        robots_declares_sitemap="robots_no_sitemap_directive" not in codes,
+        sitemap_found=len(sitemap_urls) > 0,
+        sitemap_url_count=len(sitemap_urls),
+        other_findings=[i for i in site_issues if i.code not in _STRUCTURE_CODES],
+    )

@@ -7,19 +7,23 @@ from PySide6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
-    QListWidget,
-    QListWidgetItem,
     QScrollArea,
     QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
 
-from spidermapp.core import stats
-from spidermapp.core.models import PageResult
+from spidermapp.core import recommendations, stats
+from spidermapp.core.models import Issue, IssueSeverity, PageResult
 from spidermapp.gui import theme
 
 RING_TRACK_COLOR = QColor("#E5E7EB")
+
+_SEVERITY_HEX = {
+    IssueSeverity.CRITICAL: theme.CRITICAL_HEX,
+    IssueSeverity.WARNING: theme.WARNING_HEX,
+    IssueSeverity.INFO: theme.INFO_HEX,
+}
 
 
 def _score_color(score: int) -> QColor:
@@ -120,6 +124,63 @@ def _stat_box(value_text: str, label_text: str, color: str = "#111827") -> QWidg
     return box
 
 
+def _fact_pill(ok: bool, ok_text: str, bad_text: str) -> QLabel:
+    text = f"✓ {ok_text}" if ok else f"✕ {bad_text}"
+    color = theme.GOOD_HEX if ok else theme.CRITICAL_HEX
+    bg = "#ECFDF5" if ok else "#FEF2F2"
+    pill = QLabel(text)
+    pill.setStyleSheet(
+        f"color: {color}; background: {bg}; font-size: 11.5px; font-weight: 600; "
+        f"padding: 4px 10px; border-radius: 10px;"
+    )
+    return pill
+
+
+class OpportunityRow(QFrame):
+    """One aggregated, fixable finding — framed as a concrete next step
+    ('do X') rather than a list of pages that are somehow at fault."""
+
+    def __init__(self, opportunity: stats.IssueOpportunity, parent=None):
+        super().__init__(parent)
+        color = _SEVERITY_HEX[opportunity.severity]
+        rec = recommendations.get_recommendation(
+            Issue(opportunity.category, opportunity.severity, opportunity.code, "")
+        )
+
+        self.setStyleSheet(
+            f"OpportunityRow {{ background: white; border: 1px solid #E5E7EB; border-left: 4px solid {color}; "
+            f"border-radius: 4px; }}"
+        )
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 9, 12, 9)
+        layout.setSpacing(3)
+
+        header = QHBoxLayout()
+        action_text = rec.fix_steps[0] if rec.fix_steps else rec.title
+        action = QLabel(action_text)
+        action.setTextFormat(Qt.TextFormat.PlainText)  # recommendation text may contain literal "<title>" etc.
+        action.setWordWrap(True)
+        action.setStyleSheet("font-size: 13px; font-weight: 700; color: #111827;")
+        header.addWidget(action, stretch=1)
+
+        pages_word = "página" if opportunity.affected_pages == 1 else "páginas"
+        badge = QLabel(f"{opportunity.affected_pages} {pages_word}")
+        badge.setStyleSheet(
+            f"color: {color}; background: {color}22; font-size: 11px; font-weight: 700; "
+            f"padding: 2px 8px; border-radius: 8px;"
+        )
+        badge.setAlignment(Qt.AlignmentFlag.AlignVCenter)
+        header.addWidget(badge, alignment=Qt.AlignmentFlag.AlignTop)
+        layout.addLayout(header)
+
+        if rec.why:
+            why = QLabel(rec.why)
+            why.setTextFormat(Qt.TextFormat.PlainText)
+            why.setWordWrap(True)
+            why.setStyleSheet("font-size: 11.5px; color: #6B7280;")
+            layout.addWidget(why)
+
+
 class DashboardTab(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -174,15 +235,33 @@ class DashboardTab(QWidget):
         self.category_grid.setHorizontalSpacing(12)
         self.category_grid.setVerticalSpacing(8)
         root.addLayout(self.category_grid)
-        self._category_rows: list[tuple[QLabel, StackedBar, QLabel]] = []
 
-        offenders_header = QLabel("Top ofensores")
-        offenders_header.setStyleSheet("font-size: 13px; font-weight: 700; color: #111827; margin-top: 12px;")
-        root.addWidget(offenders_header)
+        opportunities_header = QLabel("Oportunidades de optimización")
+        opportunities_header.setStyleSheet("font-size: 13px; font-weight: 700; color: #111827; margin-top: 12px;")
+        root.addWidget(opportunities_header)
 
-        self.offenders_list = QListWidget()
-        self.offenders_list.setMaximumHeight(180)
-        root.addWidget(self.offenders_list)
+        opportunities_sub = QLabel(
+            "Las mejoras con mayor impacto potencial para tu sitio, agrupadas por tipo de solución."
+        )
+        opportunities_sub.setStyleSheet("font-size: 11.5px; color: #6B7280; margin-bottom: 4px;")
+        root.addWidget(opportunities_sub)
+
+        self.opportunities_container = QWidget()
+        self.opportunities_layout = QVBoxLayout(self.opportunities_container)
+        self.opportunities_layout.setContentsMargins(0, 0, 0, 0)
+        self.opportunities_layout.setSpacing(8)
+        root.addWidget(self.opportunities_container)
+
+        infra_header = QLabel("Robots.txt y Sitemap")
+        infra_header.setStyleSheet("font-size: 13px; font-weight: 700; color: #111827; margin-top: 16px;")
+        root.addWidget(infra_header)
+
+        self.infra_container = QWidget()
+        self.infra_layout = QVBoxLayout(self.infra_container)
+        self.infra_layout.setContentsMargins(0, 0, 0, 0)
+        self.infra_layout.setSpacing(8)
+        root.addWidget(self.infra_container)
+        self._show_infra_pending()
 
         root.addStretch(1)
 
@@ -200,7 +279,14 @@ class DashboardTab(QWidget):
         self._set_stat(self.stat_orphans, str(budget.orphan_pages))
 
         self._update_categories(stats.category_breakdown(pages))
-        self._update_offenders(stats.top_offenders(pages, limit=8))
+        self._update_opportunities(stats.find_opportunities(pages, limit=8))
+
+    def update_site_info(self, sitemap_urls: list[str], site_issues: list[Issue]) -> None:
+        infra = stats.summarize_site_infrastructure(sitemap_urls, site_issues)
+        self._render_infra(infra)
+
+    def reset_site_info(self) -> None:
+        self._show_infra_pending()
 
     @staticmethod
     def _set_stat(box: QWidget, text: str) -> None:
@@ -212,7 +298,6 @@ class DashboardTab(QWidget):
             item = self.category_grid.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
-        self._category_rows.clear()
 
         if not breakdown:
             empty = QLabel("Sin issues detectados en este crawl.")
@@ -247,14 +332,64 @@ class DashboardTab(QWidget):
             self.category_grid.addWidget(bar, row, 1)
             self.category_grid.addWidget(count, row, 2)
 
-    def _update_offenders(self, offenders: list[PageResult]) -> None:
-        self.offenders_list.clear()
-        if not offenders:
-            item = QListWidgetItem("Sin páginas con issues.")
-            item.setFlags(Qt.ItemFlag.NoItemFlags)
-            self.offenders_list.addItem(item)
+    def _clear_layout(self, layout) -> None:
+        while layout.count():
+            item = layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+    def _update_opportunities(self, opportunities: list[stats.IssueOpportunity]) -> None:
+        self._clear_layout(self.opportunities_layout)
+        if not opportunities:
+            empty = QLabel("Sin oportunidades de optimización detectadas. El sitio está en buena forma. ✓")
+            empty.setStyleSheet(f"color: {theme.GOOD_HEX}; font-weight: 600; font-size: 12.5px; padding: 4px 0;")
+            self.opportunities_layout.addWidget(empty)
             return
-        for page in offenders:
-            item = QListWidgetItem(f"[{len(page.issues)} issues]   {page.url}")
-            item.setData(Qt.ItemDataRole.UserRole, page.url)
-            self.offenders_list.addItem(item)
+        for opportunity in opportunities:
+            self.opportunities_layout.addWidget(OpportunityRow(opportunity))
+
+    def _show_infra_pending(self) -> None:
+        self._clear_layout(self.infra_layout)
+        pending = QLabel("Se completa al terminar el crawl.")
+        pending.setStyleSheet("color: #9CA3AF; font-size: 12px; font-style: italic;")
+        self.infra_layout.addWidget(pending)
+
+    def _render_infra(self, infra: stats.SiteInfrastructure) -> None:
+        self._clear_layout(self.infra_layout)
+
+        robots_row = QHBoxLayout()
+        robots_row.setSpacing(8)
+        robots_row.addWidget(_fact_pill(infra.robots_found, "robots.txt encontrado", "Sin robots.txt"))
+        if infra.robots_found:
+            robots_row.addWidget(_fact_pill(infra.robots_allows_crawling, "Permite el rastreo", "Bloquea todo el sitio"))
+            robots_row.addWidget(_fact_pill(infra.robots_declares_sitemap, "Declara el sitemap", "No declara el sitemap"))
+        robots_row.addStretch(1)
+        robots_container = QWidget()
+        robots_container.setLayout(robots_row)
+        self.infra_layout.addWidget(robots_container)
+
+        sitemap_row = QHBoxLayout()
+        sitemap_row.setSpacing(8)
+        sitemap_text_ok = f"Sitemap encontrado — {infra.sitemap_url_count:,} URLs".replace(",", ".")
+        sitemap_row.addWidget(_fact_pill(infra.sitemap_found, sitemap_text_ok, "Sin sitemap o está vacío"))
+        sitemap_row.addStretch(1)
+        sitemap_container = QWidget()
+        sitemap_container.setLayout(sitemap_row)
+        self.infra_layout.addWidget(sitemap_container)
+
+        if infra.other_findings:
+            other_header = QLabel("Otros hallazgos técnicos a nivel de sitio")
+            other_header.setStyleSheet("font-size: 11.5px; font-weight: 700; color: #374151; margin-top: 6px;")
+            self.infra_layout.addWidget(other_header)
+            for issue in infra.other_findings:
+                rec = recommendations.get_recommendation(issue)
+                color = _SEVERITY_HEX[issue.severity]
+                line = QLabel(f"●  {rec.title}")
+                line.setTextFormat(Qt.TextFormat.PlainText)
+                line.setStyleSheet(f"font-size: 12px; color: {color};")
+                line.setToolTip(rec.why)
+                self.infra_layout.addWidget(line)
+        else:
+            ok_line = QLabel("Sin otros hallazgos técnicos a nivel de sitio. ✓")
+            ok_line.setStyleSheet(f"color: {theme.GOOD_HEX}; font-size: 12px; margin-top: 4px;")
+            self.infra_layout.addWidget(ok_line)

@@ -1,5 +1,5 @@
 from spidermapp.core import stats
-from spidermapp.core.models import IssueCategory, IssueSeverity, PageResult
+from spidermapp.core.models import Issue, IssueCategory, IssueSeverity, PageResult
 
 
 def _page(url, status=200, issues=None, is_orphan=False):
@@ -80,3 +80,67 @@ def test_compute_crawl_budget_categorizes_pages():
     assert budget.error_pages == 1
     assert budget.blocked_by_robots == 1
     assert budget.orphan_pages == 1
+
+
+def test_find_opportunities_groups_by_issue_code_not_by_page():
+    pages = [
+        _page("https://x.com/a", issues=[(IssueCategory.TITLES, IssueSeverity.CRITICAL, "title_missing")]),
+        _page("https://x.com/b", issues=[(IssueCategory.TITLES, IssueSeverity.CRITICAL, "title_missing")]),
+        _page("https://x.com/c", issues=[(IssueCategory.META, IssueSeverity.INFO, "thin_content")]),
+    ]
+    opportunities = stats.find_opportunities(pages)
+    title_opp = next(o for o in opportunities if o.code == "title_missing")
+    assert title_opp.affected_pages == 2
+    thin_opp = next(o for o in opportunities if o.code == "thin_content")
+    assert thin_opp.affected_pages == 1
+
+
+def test_find_opportunities_counts_each_page_once_even_with_duplicate_issue():
+    page = _page("https://x.com/a")
+    page.add_issue(IssueCategory.TITLES, IssueSeverity.CRITICAL, "title_missing", "msg")
+    page.add_issue(IssueCategory.TITLES, IssueSeverity.CRITICAL, "title_missing", "msg (duplicate)")
+    opportunities = stats.find_opportunities([page])
+    assert opportunities[0].affected_pages == 1
+
+
+def test_find_opportunities_ranked_by_severity_weighted_reach():
+    pages = [
+        _page("https://x.com/a", issues=[(IssueCategory.META, IssueSeverity.INFO, "thin_content")]),
+        _page("https://x.com/b", issues=[(IssueCategory.RESPONSE_CODES, IssueSeverity.CRITICAL, "error_404")]),
+    ]
+    opportunities = stats.find_opportunities(pages)
+    assert opportunities[0].code == "error_404"
+
+
+def test_find_opportunities_empty_when_no_issues():
+    assert stats.find_opportunities([_page("https://x.com/a")]) == []
+
+
+def test_summarize_site_infrastructure_healthy_site():
+    infra = stats.summarize_site_infrastructure(["https://x.com/a", "https://x.com/b"], [])
+    assert infra.robots_found
+    assert infra.robots_allows_crawling
+    assert infra.robots_declares_sitemap
+    assert infra.sitemap_found
+    assert infra.sitemap_url_count == 2
+    assert infra.other_findings == []
+
+
+def test_summarize_site_infrastructure_missing_robots_and_sitemap():
+    site_issues = [
+        Issue(IssueCategory.SITEMAP_ROBOTS, IssueSeverity.INFO, "robots_missing", "msg"),
+        Issue(IssueCategory.SITEMAP_ROBOTS, IssueSeverity.WARNING, "sitemap_empty", "msg"),
+    ]
+    infra = stats.summarize_site_infrastructure([], site_issues)
+    assert not infra.robots_found
+    assert not infra.sitemap_found
+    assert infra.sitemap_url_count == 0
+
+
+def test_summarize_site_infrastructure_separates_other_findings():
+    site_issues = [
+        Issue(IssueCategory.SITEMAP_ROBOTS, IssueSeverity.INFO, "robots_missing", "msg"),
+        Issue(IssueCategory.SECURITY, IssueSeverity.CRITICAL, "mixed_www", "msg"),
+    ]
+    infra = stats.summarize_site_infrastructure(["https://x.com/a"], site_issues)
+    assert [i.code for i in infra.other_findings] == ["mixed_www"]

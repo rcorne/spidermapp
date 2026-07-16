@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QFrame,
@@ -57,19 +59,21 @@ class IssueCard(QFrame):
         layout.addWidget(header)
 
         title = QLabel(rec.title)
+        title.setTextFormat(Qt.TextFormat.PlainText)  # recommendation text may contain literal "<title>" etc.
         title.setWordWrap(True)
         title.setStyleSheet("font-size: 13.5px; font-weight: 700; color: #111827;")
         layout.addWidget(title)
 
         if rec.why:
             why = QLabel(rec.why)
+            why.setTextFormat(Qt.TextFormat.PlainText)
             why.setWordWrap(True)
             why.setStyleSheet("font-size: 12px; color: #6B7280;")
             layout.addWidget(why)
 
         if rec.fix_steps:
             steps_html = "<ol style='margin:4px 0 0 -18px; padding:0;'>" + "".join(
-                f"<li style='margin-bottom:2px;'>{step}</li>" for step in rec.fix_steps
+                f"<li style='margin-bottom:2px;'>{html.escape(step)}</li>" for step in rec.fix_steps
             ) + "</ol>"
             steps = QLabel(steps_html)
             steps.setWordWrap(True)
@@ -146,28 +150,29 @@ class DetailPanel(QTabWidget):
         self._update_render(page)
 
     def _update_summary(self, page: PageResult) -> None:
+        e = html.escape
         tls_line = ""
         if page.tls is not None:
             tls_line = f"<b>TLS:</b> {'válido' if page.tls.valid else 'inválido'} — expira en {page.tls.days_until_expiry} días<br>"
         orphan_line = "<b>Huérfana:</b> sí, sin enlaces internos hacia ella<br>" if page.is_orphan else ""
         lines = [
-            f"<b>URL:</b> {page.url}<br>",
-            f"<b>URL final:</b> {page.final_url or page.url}<br>",
+            f"<b>URL:</b> {e(page.url)}<br>",
+            f"<b>URL final:</b> {e(page.final_url or page.url)}<br>",
             f"<b>Código:</b> {page.status_code}<br>",
             f"<b>Indexable:</b> {'Sí' if page.is_indexable else 'No'}<br>",
             orphan_line,
-            f"<b>Title:</b> {page.title} ({len(page.title)} car.)<br>",
-            f"<b>Meta description:</b> {page.meta_description} ({len(page.meta_description)} car.)<br>",
-            f"<b>H1:</b> {' | '.join(page.h1)}<br>",
-            f"<b>Canonical:</b> {page.canonical}<br>",
-            f"<b>Meta robots:</b> {page.meta_robots}<br>",
+            f"<b>Title:</b> {e(page.title)} ({len(page.title)} car.)<br>",
+            f"<b>Meta description:</b> {e(page.meta_description)} ({len(page.meta_description)} car.)<br>",
+            f"<b>H1:</b> {e(' | '.join(page.h1))}<br>",
+            f"<b>Canonical:</b> {e(page.canonical)}<br>",
+            f"<b>Meta robots:</b> {e(page.meta_robots)}<br>",
             f"<b>Palabras:</b> {page.word_count}<br>",
-            f"<b>Tecnología detectada:</b> {', '.join(page.tech)}<br>",
+            f"<b>Tecnología detectada:</b> {e(', '.join(page.tech))}<br>",
             tls_line,
             f"<b>Tiempo de respuesta:</b> {page.fetch_time_ms:.0f} ms<br>",
         ]
         if page.error:
-            lines.append(f"<b>Error:</b> {page.error}<br>")
+            lines.append(f"<b>Error:</b> {e(page.error)}<br>")
         self.summary_label.setText("".join(lines))
 
     def _clear_issue_cards(self) -> None:
@@ -197,10 +202,12 @@ class DetailPanel(QTabWidget):
         for url, status in hops:
             color = theme.WARNING_HEX if status in (302, 303, 307) else theme.GOOD_HEX
             segments.append(
-                f'<div style="margin-bottom:6px;"><span style="font-family:monospace;">{url}</span> '
+                f'<div style="margin-bottom:6px;"><span style="font-family:monospace;">{html.escape(url)}</span> '
                 f'&nbsp;<span style="color:{color}; font-weight:700;">──[{status}]──▶</span></div>'
             )
-        segments.append(f'<div><span style="font-family:monospace; font-weight:700;">{final}</span> (destino final)</div>')
+        segments.append(
+            f'<div><span style="font-family:monospace; font-weight:700;">{html.escape(final)}</span> (destino final)</div>'
+        )
         self.redirects_label.setText("".join(segments))
 
     def _update_outlinks(self, page: PageResult) -> None:

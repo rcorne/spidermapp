@@ -300,6 +300,7 @@ class MainWindow(QMainWindow):
         self.detail_panel.show_page(None)
         self.sidebar.refresh_counts([])
         self.dashboard_tab.update_data([])
+        self.dashboard_tab.reset_site_info()
         self.sitemap_tab.set_pages([], seed_url)
         self.structure_tab.set_pages([], seed_url)
         self.llm_tab.set_crawl_data("", [])
@@ -372,6 +373,7 @@ class MainWindow(QMainWindow):
 
         self._all_pages = self.table_model.all_pages()
         self.dashboard_tab.update_data(self._all_pages)
+        self.dashboard_tab.update_site_info(result.sitemap_urls, result.site_issues)
         self.sitemap_tab.set_pages(self._all_pages, result.seed_url)
         self.structure_tab.set_pages(self._all_pages, result.seed_url)
         self.llm_tab.set_crawl_data(result.seed_url, self._all_pages)
@@ -387,11 +389,9 @@ class MainWindow(QMainWindow):
 
         note = " (detenido antes de terminar)" if result.stopped_early else ""
         self.statusBar().showMessage(
-            f"Crawl terminado{note}: {len(result.pages)} páginas, {len(result.site_issues)} issues a nivel de sitio."
+            f"Crawl terminado{note}: {len(result.pages)} páginas rastreadas. "
+            f"Revisa Vista general para la estructura técnica y las oportunidades de mejora."
         )
-        if result.site_issues:
-            messages = "\n".join(f"- {i.message}" for i in result.site_issues)
-            QMessageBox.information(self, "Issues a nivel de sitio", messages)
 
     def _on_crawl_error(self, message: str) -> None:
         self.start_button.setEnabled(True)
