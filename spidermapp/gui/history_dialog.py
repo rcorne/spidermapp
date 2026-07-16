@@ -35,6 +35,18 @@ class HistoryDialog(QDialog):
         hint.setStyleSheet("color: #4B5563; font-size: 12px;")
         layout.addWidget(hint)
 
+        content_row = QHBoxLayout()
+
+        compare_col = QVBoxLayout()
+        self.compare_button = QPushButton("Comparar\nseleccionados")
+        self.compare_button.setStyleSheet(theme.BUTTON_SUCCESS_QSS)
+        self.compare_button.setMinimumWidth(120)
+        self.compare_button.setMinimumHeight(56)
+        self.compare_button.clicked.connect(self._compare_selected)
+        compare_col.addWidget(self.compare_button)
+        compare_col.addStretch(1)
+        content_row.addLayout(compare_col)
+
         self.table = QTableWidget(0, 4)
         self.table.setHorizontalHeaderLabels(["Sitio", "Fecha", "Páginas", "Recuperable"])
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
@@ -43,7 +55,8 @@ class HistoryDialog(QDialog):
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.setColumnWidth(0, 300)
         self.table.setColumnWidth(1, 160)
-        layout.addWidget(self.table, stretch=1)
+        content_row.addWidget(self.table, stretch=1)
+        layout.addLayout(content_row, stretch=1)
 
         self._entries = history.list_all_snapshots()
         self.table.setRowCount(len(self._entries))
@@ -59,11 +72,6 @@ class HistoryDialog(QDialog):
         self.open_button.setStyleSheet(theme.BUTTON_PRIMARY_QSS)
         self.open_button.clicked.connect(self._open_selected)
         buttons_row.addWidget(self.open_button)
-
-        self.compare_button = QPushButton("Comparar seleccionados")
-        self.compare_button.setStyleSheet(theme.BUTTON_SECONDARY_QSS)
-        self.compare_button.clicked.connect(self._compare_selected)
-        buttons_row.addWidget(self.compare_button)
 
         buttons_row.addStretch(1)
         close = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)

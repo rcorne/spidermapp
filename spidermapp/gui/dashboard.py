@@ -38,11 +38,17 @@ class HealthScoreRing(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._score = 100
+        self._pending = True  # no crawl has produced data yet — don't imply a score of 100
         self.setMinimumSize(140, 140)
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
 
     def set_score(self, score: int) -> None:
         self._score = score
+        self._pending = False
+        self.update()
+
+    def set_pending(self) -> None:
+        self._pending = True
         self.update()
 
     def paintEvent(self, event) -> None:  # noqa: N802 - Qt override
@@ -56,18 +62,19 @@ class HealthScoreRing(QWidget):
         painter.setPen(track_pen)
         painter.drawArc(rect, 0, 360 * 16)
 
-        color = _score_color(self._score)
-        progress_pen = QPen(color, 12, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
-        painter.setPen(progress_pen)
-        span = int(360 * 16 * (self._score / 100))
-        painter.drawArc(rect, 90 * 16, -span)
+        if not self._pending:
+            color = _score_color(self._score)
+            progress_pen = QPen(color, 12, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+            painter.setPen(progress_pen)
+            span = int(360 * 16 * (self._score / 100))
+            painter.drawArc(rect, 90 * 16, -span)
 
-        painter.setPen(QColor("#111827"))
+        painter.setPen(QColor("#111827") if not self._pending else QColor("#9CA3AF"))
         font = QFont(self.font())
-        font.setPointSize(22)
+        font.setPointSize(22 if not self._pending else 15)
         font.setBold(True)
         painter.setFont(font)
-        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, str(self._score))
+        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, "—" if self._pending else str(self._score))
 
 
 class StackedBar(QWidget):
@@ -107,7 +114,7 @@ class StackedBar(QWidget):
         painter.setBrush(Qt.BrushStyle.NoBrush)
 
 
-def _stat_box(value_text: str, label_text: str, color: str = "#111827") -> QWidget:
+def _stat_box(value_text: str, label_text: str, definition_text: str = "", pending_text: str = "", color: str = "#111827") -> QWidget:
     box = QFrame()
     box.setFrameShape(QFrame.Shape.NoFrame)
     layout = QVBoxLayout(box)
@@ -115,13 +122,33 @@ def _stat_box(value_text: str, label_text: str, color: str = "#111827") -> QWidg
     layout.setSpacing(2)
 
     value = QLabel(value_text)
-    value.setStyleSheet(f"font-size: 20px; font-weight: 700; color: {color};")
+    value.setStyleSheet(f"font-size: 30px; font-weight: 700; color: {color};")
     label = QLabel(label_text)
-    label.setStyleSheet("font-size: 11px; color: #6B7280;")
+    label.setStyleSheet("font-size: 13px; font-weight: 600; color: #374151;")
 
     layout.addWidget(value)
     layout.addWidget(label)
+
+    definition = QLabel(definition_text)
+    definition.setWordWrap(True)
+    definition.setStyleSheet("font-size: 10.5px; color: #9CA3AF;")
+    definition.setVisible(bool(definition_text))
+    layout.addWidget(definition)
+
+    box._value_label = value
+    box._definition_label = definition
+    box._definition_text = definition_text
+    box._pending_text = pending_text or "Inicia el crawl para ver este dato."
     return box
+
+
+def _set_stat_pending(box: QWidget, pending: bool) -> None:
+    if pending:
+        box._value_label.setText("—")
+        box._definition_label.setText(box._pending_text)
+    else:
+        box._definition_label.setText(box._definition_text)
+    box._definition_label.setVisible(True)
 
 
 def _fact_pill(ok: bool, ok_text: str, bad_text: str) -> QLabel:
@@ -199,6 +226,14 @@ class DashboardTab(QWidget):
         root.setContentsMargins(20, 20, 20, 20)
         root.setSpacing(20)
 
+        self.start_banner = QLabel("👆 Ingresa una URL arriba y presiona \"Iniciar crawl\" para ver el análisis de tu sitio.")
+        self.start_banner.setStyleSheet(
+            f"background: {theme.PRIMARY_SOFT}; color: {theme.PRIMARY}; font-size: 12.5px; font-weight: 600; "
+            f"padding: 10px 14px; border-radius: 6px;"
+        )
+        self.start_banner.setWordWrap(True)
+        root.addWidget(self.start_banner)
+
         top_row = QHBoxLayout()
         top_row.setSpacing(24)
 
@@ -214,12 +249,34 @@ class DashboardTab(QWidget):
         budget_grid = QGridLayout()
         budget_grid.setHorizontalSpacing(28)
         budget_grid.setVerticalSpacing(10)
-        self.stat_total = _stat_box("0", "Páginas rastreadas")
-        self.stat_ok = _stat_box("0", "OK", theme.GOOD_HEX)
-        self.stat_errors = _stat_box("0", "Errores", theme.CRITICAL_HEX)
-        self.stat_blocked = _stat_box("0", "Bloqueadas (robots.txt)")
-        self.stat_duplicates = _stat_box("0", "Contenido duplicado", theme.WARNING_HEX)
-        self.stat_orphans = _stat_box("0", "Páginas huérfanas", theme.WARNING_HEX)
+        self.stat_total = _stat_box(
+            "0", "Páginas rastreadas", "Total de URLs visitadas durante este rastreo.",
+            "Inicia el crawl para empezar a contar las páginas rastreadas.",
+        )
+        self.stat_ok = _stat_box(
+            "0", "OK", "Páginas con código 200 y sin errores críticos.",
+            "Inicia el crawl para contar las páginas en condición OK.",
+            theme.GOOD_HEX,
+        )
+        self.stat_errors = _stat_box(
+            "0", "Errores", "Páginas con errores 4xx, 5xx u otros problemas críticos.",
+            "Inicia el crawl para contar las páginas con errores.",
+            theme.CRITICAL_HEX,
+        )
+        self.stat_blocked = _stat_box(
+            "0", "Bloqueadas (robots.txt)", "Páginas que robots.txt le impide rastrear a los motores de búsqueda.",
+            "Inicia el crawl para contar las páginas bloqueadas por robots.txt.",
+        )
+        self.stat_duplicates = _stat_box(
+            "0", "Contenido duplicado", "Páginas con contenido prácticamente idéntico al de otra página del sitio.",
+            "Inicia el crawl para contar las páginas con contenido duplicado.",
+            theme.WARNING_HEX,
+        )
+        self.stat_orphans = _stat_box(
+            "0", "Páginas huérfanas", "Páginas sin ningún enlace interno hacia ellas, encontradas solo por el sitemap.",
+            "Inicia el crawl para contar las páginas huérfanas.",
+            theme.WARNING_HEX,
+        )
         for i, box in enumerate(
             (self.stat_total, self.stat_ok, self.stat_errors, self.stat_blocked, self.stat_duplicates, self.stat_orphans)
         ):
@@ -264,8 +321,14 @@ class DashboardTab(QWidget):
         self._show_infra_pending()
 
         root.addStretch(1)
+        self._show_pending_state()
 
     def update_data(self, pages: list[PageResult], priority_urls: set[str] | None = None) -> None:
+        if not pages:
+            self._show_pending_state()
+            return
+
+        self.start_banner.setVisible(False)
         priority_urls = priority_urls or set()
         score = stats.health_score(pages, priority_urls)
         self.ring.set_score(score)
@@ -281,6 +344,24 @@ class DashboardTab(QWidget):
         self._update_categories(stats.category_breakdown(pages))
         self._update_opportunities(stats.find_opportunities(pages, limit=8))
 
+    def _show_pending_state(self) -> None:
+        self.start_banner.setVisible(True)
+        self.ring.set_pending()
+        for box in (
+            self.stat_total, self.stat_ok, self.stat_errors, self.stat_blocked, self.stat_duplicates, self.stat_orphans
+        ):
+            _set_stat_pending(box, True)
+
+        self._clear_layout(self.category_grid)
+        empty_cat = QLabel("Inicia el crawl para ver los issues por categoría.")
+        empty_cat.setStyleSheet("color: #9CA3AF; font-size: 12px; font-style: italic;")
+        self.category_grid.addWidget(empty_cat, 0, 0)
+
+        self._clear_layout(self.opportunities_layout)
+        empty_opp = QLabel("Inicia el crawl para ver oportunidades de optimización.")
+        empty_opp.setStyleSheet("color: #9CA3AF; font-size: 12px; font-style: italic;")
+        self.opportunities_layout.addWidget(empty_opp)
+
     def update_site_info(self, sitemap_urls: list[str], site_issues: list[Issue]) -> None:
         infra = stats.summarize_site_infrastructure(sitemap_urls, site_issues)
         self._render_infra(infra)
@@ -290,8 +371,8 @@ class DashboardTab(QWidget):
 
     @staticmethod
     def _set_stat(box: QWidget, text: str) -> None:
-        value_label = box.layout().itemAt(0).widget()
-        value_label.setText(text)
+        box._value_label.setText(text)
+        _set_stat_pending(box, False)
 
     def _update_categories(self, breakdown: list[stats.CategoryBreakdown]) -> None:
         while self.category_grid.count():

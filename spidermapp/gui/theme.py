@@ -67,6 +67,19 @@ QPushButton:hover {{ background-color: {PRIMARY_SOFT}; }}
 QPushButton:disabled {{ color: #B7B6E8; border-color: #D8D9EC; background-color: white; }}
 """
 
+BUTTON_SUCCESS_QSS = f"""
+QPushButton {{
+    background-color: {GOOD_HEX};
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 7px 18px;
+    font-weight: 600;
+}}
+QPushButton:hover {{ background-color: #047857; }}
+QPushButton:disabled {{ background-color: #A7D9C7; color: #F0FDF9; }}
+"""
+
 
 def severity_hex(severity: IssueSeverity | None) -> str:
     if severity is None:

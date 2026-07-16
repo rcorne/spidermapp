@@ -34,6 +34,7 @@ from spidermapp.gui.dashboard import DashboardTab
 from spidermapp.gui.detail_panel import DetailPanel
 from spidermapp.gui.history_dialog import HistoryDialog
 from spidermapp.gui.llm_tab import LlmVisibilityTab
+from spidermapp.gui.news_ticker import NewsTicker
 from spidermapp.gui.settings_dialog import SettingsDialog
 from spidermapp.gui.sidebar import ALL_KEY, DUPLICATES_KEY, ISSUES_KEY, ORPHANS_KEY, Sidebar
 from spidermapp.gui.sitemap_view import SiteMapTab
@@ -92,6 +93,9 @@ class MainWindow(QMainWindow):
         root_layout.addWidget(toolbar_container)
 
         root_layout.addWidget(self._build_progress_row())
+
+        self.news_ticker = NewsTicker()
+        root_layout.addWidget(self.news_ticker)
 
         self.tabs = QTabWidget()
         root_layout.addWidget(self.tabs, stretch=1)
