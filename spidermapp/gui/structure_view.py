@@ -24,6 +24,7 @@ class StructureTab(QWidget):
             "Estructura del dominio: subdominios y jerarquía de rutas. "
             "Doble clic en un nodo rastreado abre su detalle en la Tabla."
         )
+        header.setWordWrap(True)
         header.setStyleSheet("padding: 8px 14px; font-size: 11.5px; color: #4B5563; background: #F9FAFB; border-bottom: 1px solid #E5E7EB;")
         layout.addWidget(header)
 

@@ -217,6 +217,7 @@ class SiteMapTab(QWidget):
             " &nbsp;&nbsp; ○ (borde punteado) Página huérfana — tamaño del nodo ∝ enlaces entrantes"
         )
         legend.setTextFormat(Qt.TextFormat.RichText)
+        legend.setWordWrap(True)
         legend.setStyleSheet(
             f"padding: 8px 14px; font-size: 11.5px; color: #4B5563; background: #F9FAFB; "
             f"border-bottom: 1px solid #E5E7EB;"

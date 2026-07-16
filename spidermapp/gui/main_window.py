@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QProgressBar,
     QPushButton,
+    QSizePolicy,
     QSpinBox,
     QSplitter,
     QStatusBar,
@@ -46,7 +47,16 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Spidermapp — Auditor de SEO")
-        self.resize(1440, 940)
+
+        # Behave like any normal window: shrinkable, and never open wider
+        # than the screen the app lands on.
+        self.setMinimumSize(720, 480)
+        screen = QApplication.primaryScreen()
+        if screen is not None:
+            available = screen.availableGeometry()
+            self.resize(min(1440, available.width() - 48), min(940, available.height() - 48))
+        else:
+            self.resize(1200, 800)
 
         self._worker: CrawlWorker | None = None
         self._all_pages: list[PageResult] = []
@@ -163,8 +173,10 @@ class MainWindow(QMainWindow):
 
         self.phase_label = QLabel("Listo.")
         self.phase_label.setStyleSheet("color: #6B7280; font-size: 11px;")
-        self.phase_label.setMinimumWidth(340)
-        row.addWidget(self.phase_label)
+        # Never let a long URL in the label dictate the window's minimum width
+        self.phase_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
+        self.phase_label.setMinimumWidth(120)
+        row.addWidget(self.phase_label, stretch=1)
         return container
 
     def _build_table_tab(self) -> QWidget:
@@ -200,76 +212,78 @@ class MainWindow(QMainWindow):
 
         return container
 
-    def _build_toolbar(self) -> QHBoxLayout:
-        layout = QHBoxLayout()
-        layout.setSpacing(10)
+    def _build_toolbar(self) -> QVBoxLayout:
+        """Two compact rows so the window can shrink to laptop widths.
+        Export/compare actions live in the menu bar (Exportar / Análisis)."""
+        outer = QVBoxLayout()
+        outer.setSpacing(4)
+        outer.setContentsMargins(10, 8, 10, 8)
 
-        layout.addWidget(QLabel("URL:"))
+        row1 = QHBoxLayout()
+        row1.setSpacing(8)
+        row1.addWidget(QLabel("URL:"))
         self.url_input = QLineEdit()
         self.url_input.setPlaceholderText("https://ejemplo.com")
-        self.url_input.setMinimumWidth(220)
-        layout.addWidget(self.url_input, stretch=1)
-
-        layout.addWidget(QLabel("Máx. páginas:"))
-        self.max_pages_input = QSpinBox()
-        self.max_pages_input.setRange(1, MAX_CRAWL_PAGES)
-        self.max_pages_input.setValue(500)
-        layout.addWidget(self.max_pages_input)
-
-        layout.addWidget(QLabel("Máx. profundidad:"))
-        self.max_depth_input = QSpinBox()
-        self.max_depth_input.setRange(1, 100)
-        self.max_depth_input.setValue(10)
-        layout.addWidget(self.max_depth_input)
-
-        layout.addWidget(QLabel("Concurrencia:"))
-        self.concurrency_input = QSpinBox()
-        self.concurrency_input.setRange(1, 64)
-        self.concurrency_input.setValue(8)
-        layout.addWidget(self.concurrency_input)
-
-        self.render_js_checkbox = QCheckBox("Renderizar JS (más lento)")
-        layout.addWidget(self.render_js_checkbox)
+        self.url_input.setMinimumWidth(140)
+        row1.addWidget(self.url_input, stretch=1)
 
         self.start_button = QPushButton("Iniciar crawl")
         self.start_button.setStyleSheet(theme.BUTTON_PRIMARY_QSS)
         self.start_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.start_button.clicked.connect(self._start_crawl)
-        layout.addWidget(self.start_button)
+        row1.addWidget(self.start_button)
 
         self.stop_button = QPushButton("Detener")
         self.stop_button.setStyleSheet(theme.BUTTON_DANGER_QSS)
         self.stop_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.stop_button.setEnabled(False)
         self.stop_button.clicked.connect(self._stop_crawl)
-        layout.addWidget(self.stop_button)
+        row1.addWidget(self.stop_button)
+        outer.addLayout(row1)
 
-        self.compare_button = QPushButton("Comparar con crawl anterior")
+        row2 = QHBoxLayout()
+        row2.setSpacing(6)
+
+        row2.addWidget(QLabel("Páginas:"))
+        self.max_pages_input = QSpinBox()
+        self.max_pages_input.setRange(1, MAX_CRAWL_PAGES)
+        self.max_pages_input.setValue(500)
+        self.max_pages_input.setMaximumWidth(72)
+        row2.addWidget(self.max_pages_input)
+
+        row2.addWidget(QLabel("Prof.:"))
+        self.max_depth_input = QSpinBox()
+        self.max_depth_input.setRange(1, 100)
+        self.max_depth_input.setValue(10)
+        self.max_depth_input.setMaximumWidth(56)
+        row2.addWidget(self.max_depth_input)
+
+        row2.addWidget(QLabel("Hilos:"))
+        self.concurrency_input = QSpinBox()
+        self.concurrency_input.setRange(1, 64)
+        self.concurrency_input.setValue(8)
+        self.concurrency_input.setMaximumWidth(50)
+        row2.addWidget(self.concurrency_input)
+
+        self.render_js_checkbox = QCheckBox("Renderizar JS")
+        self.render_js_checkbox.setToolTip(
+            "Abre cada página en Chromium para comparar HTML crudo vs renderizado y mobile vs desktop. "
+            "Si el sitio es una app JavaScript, el crawler lo activa solo aunque no marques esta casilla."
+        )
+        row2.addWidget(self.render_js_checkbox)
+
+        row2.addStretch(1)
+
+        self.compare_button = QPushButton("Comparar")
+        self.compare_button.setToolTip("Comparar con el crawl anterior de este mismo sitio")
         self.compare_button.setStyleSheet(theme.BUTTON_SECONDARY_QSS)
         self.compare_button.setCursor(Qt.CursorShape.PointingHandCursor)
         self.compare_button.setEnabled(False)
         self.compare_button.clicked.connect(self._compare_with_previous)
-        layout.addWidget(self.compare_button)
+        row2.addWidget(self.compare_button)
+        outer.addLayout(row2)
 
-        self.export_csv_button = QPushButton("CSV")
-        self.export_csv_button.setStyleSheet(theme.BUTTON_SECONDARY_QSS)
-        self.export_csv_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.export_csv_button.clicked.connect(lambda: self._export("csv"))
-        layout.addWidget(self.export_csv_button)
-
-        self.export_xlsx_button = QPushButton("XLSX")
-        self.export_xlsx_button.setStyleSheet(theme.BUTTON_SECONDARY_QSS)
-        self.export_xlsx_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.export_xlsx_button.clicked.connect(lambda: self._export("xlsx"))
-        layout.addWidget(self.export_xlsx_button)
-
-        self.export_pdf_button = QPushButton("Reporte PDF")
-        self.export_pdf_button.setStyleSheet(theme.BUTTON_SECONDARY_QSS)
-        self.export_pdf_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.export_pdf_button.clicked.connect(self._export_pdf)
-        layout.addWidget(self.export_pdf_button)
-
-        return layout
+        return outer
 
     def _start_crawl(self) -> None:
         seed_url = self.url_input.text().strip()
@@ -338,7 +352,10 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"Rastreadas {done} de {total} páginas (máx.)...")
 
     def _on_status_changed(self, message: str) -> None:
-        self.phase_label.setText(message)
+        metrics = self.phase_label.fontMetrics()
+        elided = metrics.elidedText(message, Qt.TextElideMode.ElideMiddle, max(80, self.phase_label.width() - 8))
+        self.phase_label.setText(elided)
+        self.phase_label.setToolTip(message)
 
     def _on_crawl_finished(self, result: CrawlResult) -> None:
         self.start_button.setEnabled(True)
