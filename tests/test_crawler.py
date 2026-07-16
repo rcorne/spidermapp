@@ -81,6 +81,29 @@ async def test_crawl_discovers_all_internal_pages():
     assert "https://example.test/missing" in urls
 
 
+async def test_crawl_excludes_urls_matching_pattern():
+    config = CrawlConfig(seed_url="https://example.test/", max_pages=50, exclude_patterns=[r"/contact$"])
+    result = await crawler_mod.crawl(config)
+    urls = {p.url for p in result.pages}
+    assert "https://example.test/about" in urls
+    assert "https://example.test/contact" not in urls
+
+
+async def test_crawl_ignores_invalid_exclude_pattern():
+    config = CrawlConfig(seed_url="https://example.test/", max_pages=50, exclude_patterns=["(unbalanced["])
+    result = await crawler_mod.crawl(config)
+    urls = {p.url for p in result.pages}
+    assert "https://example.test/about" in urls
+
+
+async def test_crawl_respects_max_url_length():
+    config = CrawlConfig(seed_url="https://example.test/", max_pages=50, max_url_length=len("https://example.test/about") - 1)
+    result = await crawler_mod.crawl(config)
+    urls = {p.url for p in result.pages}
+    assert "https://example.test/about" not in urls
+    assert "https://example.test/" in urls
+
+
 async def test_crawl_flags_404_page():
     config = CrawlConfig(seed_url="https://example.test/", max_pages=50)
     result = await crawler_mod.crawl(config)

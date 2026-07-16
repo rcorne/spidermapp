@@ -29,6 +29,7 @@ from spidermapp.core import app_settings, export, history, pdf_report, reports
 from spidermapp.core.models import CrawlConfig, CrawlResult, IssueCategory, PageResult
 from spidermapp.gui import theme
 from spidermapp.gui.about_dialog import AboutDialog
+from spidermapp.gui.crawl_settings_dialog import CrawlSettingsDialog
 from spidermapp.gui.crawl_worker import CrawlWorker
 from spidermapp.gui.dashboard import DashboardTab
 from spidermapp.gui.detail_panel import DetailPanel
@@ -64,6 +65,21 @@ class MainWindow(QMainWindow):
         self._last_result: CrawlResult | None = None
         self._previous_snapshot = None
         self._pages_since_sitemap_refresh = 0
+
+        # Advanced crawl options set once via Análisis → Configuración del
+        # rastreo…, kept separate from the quick controls in the toolbar
+        # (páginas, profundidad, hilos, renderizar JS) that get touched on
+        # nearly every crawl.
+        default_config = CrawlConfig(seed_url="")
+        self._crawl_advanced: dict = {
+            "respect_robots": default_config.respect_robots,
+            "include_subdomains": default_config.include_subdomains,
+            "user_agent": default_config.user_agent,
+            "max_url_length": default_config.max_url_length,
+            "exclude_patterns": list(default_config.exclude_patterns),
+            "priority_urls": list(default_config.priority_urls),
+            "request_timeout": default_config.request_timeout,
+        }
 
         self.table_model = PageTableModel(self)
         self.proxy_model = IssueFilterProxyModel(self)
@@ -144,6 +160,8 @@ class MainWindow(QMainWindow):
         analisis = menubar.addMenu("Análisis")
         action(analisis, "Iniciar crawl", self._start_crawl, "Ctrl+R")
         action(analisis, "Detener crawl", self._stop_crawl, "Ctrl+.")
+        analisis.addSeparator()
+        action(analisis, "Configuración del rastreo…", self._open_crawl_settings_dialog)
         analisis.addSeparator()
         action(analisis, "Comparar con crawl anterior", self._compare_with_previous)
         action(analisis, "Historial de crawls…", self._open_history_dialog)
@@ -333,6 +351,7 @@ class MainWindow(QMainWindow):
             max_depth=self.max_depth_input.value(),
             concurrency=self.concurrency_input.value(),
             render_js=self.render_js_checkbox.isChecked(),
+            **self._crawl_advanced,
         )
 
         self._worker = CrawlWorker(config)
@@ -567,6 +586,13 @@ class MainWindow(QMainWindow):
 
         if self._last_result is not None:
             self.llm_tab.set_crawl_data(self._last_result.seed_url, self._all_pages)
+
+    def _open_crawl_settings_dialog(self) -> None:
+        dialog = CrawlSettingsDialog(self._crawl_advanced, self)
+        if not dialog.exec():
+            return
+        self._crawl_advanced = dialog.result_config()
+        self.statusBar().showMessage("Configuración del rastreo guardada.")
 
     def _open_history_dialog(self) -> None:
         dialog = HistoryDialog(self)

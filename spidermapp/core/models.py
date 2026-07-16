@@ -56,6 +56,8 @@ class CrawlConfig:
     request_timeout: float = 15.0
     priority_urls: list[str] = field(default_factory=list)
     include_subdomains: bool = False
+    exclude_patterns: list[str] = field(default_factory=list)
+    max_url_length: int = 0  # 0 = sin límite
 
 
 @dataclass

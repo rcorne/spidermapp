@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from typing import Awaitable, Callable, Optional, Union
 from urllib.parse import urlparse
@@ -74,6 +75,23 @@ class Crawler:
         self._browser = None
         self._playwright = None
         self._on_status: OnStatus | None = None
+        self._exclude_regexes: list[re.Pattern] = []
+        for pattern in config.exclude_patterns:
+            pattern = pattern.strip()
+            if not pattern:
+                continue
+            try:
+                self._exclude_regexes.append(re.compile(pattern))
+            except re.error:
+                continue  # invalid pattern from the user: ignore rather than crash the crawl
+
+    def _url_allowed(self, url: str) -> bool:
+        """Applies the "Límites" config (exclude patterns, max URL length)
+        at every point new URLs are discovered, before they enter the
+        frontier — never after they've already been fetched."""
+        if self.config.max_url_length and len(url) > self.config.max_url_length:
+            return False
+        return not any(regex.search(url) for regex in self._exclude_regexes)
 
     async def _status(self, message: str) -> None:
         await _maybe_await(self._on_status, message)
@@ -218,6 +236,8 @@ class Crawler:
                 seed_page.final_url or seed_page.url, link.target, include_subdomains=False
             ):
                 continue
+            if not self._url_allowed(link.target):
+                continue
             if link.target in self.visited:
                 continue
             self.visited.add(link.target)
@@ -285,6 +305,8 @@ class Crawler:
             if normalized in self.visited:
                 continue
             if not url_utils.is_same_site(normalized, self.config.seed_url, include_subdomains=self.config.include_subdomains):
+                continue
+            if not self._url_allowed(normalized):
                 continue
             self.visited.add(normalized)
             candidates.append(normalized)
@@ -404,6 +426,8 @@ class Crawler:
                     if not self.config.include_subdomains and not url_utils.is_same_site(
                         page.final_url, link.target, include_subdomains=False
                     ):
+                        continue
+                    if not self._url_allowed(link.target):
                         continue
                     discovered.append((link.target, depth + 1))
 
