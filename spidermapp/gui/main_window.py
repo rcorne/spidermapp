@@ -25,15 +25,16 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from spidermapp.core import export, history, pdf_report, reports
+from spidermapp.core import app_settings, export, history, pdf_report, reports
 from spidermapp.core.models import CrawlConfig, CrawlResult, IssueCategory, PageResult
 from spidermapp.gui import theme
-from spidermapp.gui.connectors_dialog import ConnectorsDialog
+from spidermapp.gui.about_dialog import AboutDialog
 from spidermapp.gui.crawl_worker import CrawlWorker
 from spidermapp.gui.dashboard import DashboardTab
 from spidermapp.gui.detail_panel import DetailPanel
 from spidermapp.gui.history_dialog import HistoryDialog
 from spidermapp.gui.llm_tab import LlmVisibilityTab
+from spidermapp.gui.settings_dialog import SettingsDialog
 from spidermapp.gui.sidebar import ALL_KEY, DUPLICATES_KEY, ISSUES_KEY, ORPHANS_KEY, Sidebar
 from spidermapp.gui.sitemap_view import SiteMapTab
 from spidermapp.gui.structure_view import StructureTab
@@ -112,10 +113,17 @@ class MainWindow(QMainWindow):
     def _build_menus(self) -> None:
         menubar = self.menuBar()
 
-        def action(menu, text: str, slot, shortcut: str | None = None) -> QAction:
+        def action(menu, text: str, slot, shortcut: str | None = None, role=QAction.MenuRole.NoRole) -> QAction:
             act = QAction(text, self)
             if shortcut:
                 act.setShortcut(QKeySequence(shortcut))
+            # macOS auto-relocates actions whose text matches "preferences"/
+            # "about"/"quit"-like words (QAction.MenuRole.TextHeuristicRole,
+            # the default) into the system App menu — which silently empties
+            # and hides whatever custom menu they were in. NoRole opts every
+            # action out of that guesswork; the three below opt back in
+            # deliberately, in the exact native slot macOS users expect.
+            act.setMenuRole(role)
             act.triggered.connect(slot)
             menu.addAction(act)
             return act
@@ -123,15 +131,15 @@ class MainWindow(QMainWindow):
         archivo = menubar.addMenu("Archivo")
         action(archivo, "Nuevo crawl…", self._menu_new_crawl, "Ctrl+N")
         action(archivo, "Abrir crawl guardado…", self._open_history_dialog, "Ctrl+O")
-        archivo.addSeparator()
-        action(archivo, "Salir", QApplication.instance().quit, "Ctrl+Q")
+        # Configuración… and Salir carry PreferencesRole/QuitRole below, so
+        # macOS pulls them into the native app menu — no separators needed
+        # here since nothing custom is left to separate them from.
+        action(archivo, "Configuración…", self._open_settings_dialog, "Ctrl+,", role=QAction.MenuRole.PreferencesRole)
+        action(archivo, "Salir", QApplication.instance().quit, "Ctrl+Q", role=QAction.MenuRole.QuitRole)
 
         edicion = menubar.addMenu("Edición")
         action(edicion, "Copiar URL seleccionada", self._copy_selected_url, "Ctrl+C")
         action(edicion, "Copiar tabla visible (CSV)", self._copy_visible_table)
-
-        conectores = menubar.addMenu("Conectores")
-        action(conectores, "Configurar APIs…", self._open_connectors_dialog)
 
         analisis = menubar.addMenu("Análisis")
         action(analisis, "Iniciar crawl", self._start_crawl, "Ctrl+R")
@@ -150,6 +158,11 @@ class MainWindow(QMainWindow):
         action(exportar, "Informes por área de SEO…", self._export_area_reports)
 
         ayuda = menubar.addMenu("Ayuda")
+        # Deliberately NoRole (not AboutRole): the user wants this reachable
+        # from the "Ayuda" menu specifically. AboutRole would let macOS pull
+        # it into the native app menu instead — which would leave "Ayuda"
+        # with zero items and macOS would hide the whole menu, same bug as
+        # the vanished "Conectores" menu this file used to have.
         action(ayuda, "Acerca de Spidermapp", self._show_about)
 
     def _build_progress_row(self) -> QWidget:
@@ -225,6 +238,7 @@ class MainWindow(QMainWindow):
         self.url_input = QLineEdit()
         self.url_input.setPlaceholderText("https://ejemplo.com")
         self.url_input.setMinimumWidth(140)
+        self.url_input.returnPressed.connect(self._start_crawl)
         row1.addWidget(self.url_input, stretch=1)
 
         self.start_button = QPushButton("Iniciar crawl")
@@ -244,28 +258,31 @@ class MainWindow(QMainWindow):
         row2 = QHBoxLayout()
         row2.setSpacing(6)
 
+        defaults = app_settings.load_settings()
+
         row2.addWidget(QLabel("Páginas:"))
         self.max_pages_input = QSpinBox()
         self.max_pages_input.setRange(1, MAX_CRAWL_PAGES)
-        self.max_pages_input.setValue(500)
+        self.max_pages_input.setValue(defaults.default_max_pages)
         self.max_pages_input.setMaximumWidth(72)
         row2.addWidget(self.max_pages_input)
 
         row2.addWidget(QLabel("Prof.:"))
         self.max_depth_input = QSpinBox()
         self.max_depth_input.setRange(1, 100)
-        self.max_depth_input.setValue(10)
+        self.max_depth_input.setValue(defaults.default_max_depth)
         self.max_depth_input.setMaximumWidth(56)
         row2.addWidget(self.max_depth_input)
 
         row2.addWidget(QLabel("Hilos:"))
         self.concurrency_input = QSpinBox()
         self.concurrency_input.setRange(1, 64)
-        self.concurrency_input.setValue(8)
+        self.concurrency_input.setValue(defaults.default_concurrency)
         self.concurrency_input.setMaximumWidth(50)
         row2.addWidget(self.concurrency_input)
 
         self.render_js_checkbox = QCheckBox("Renderizar JS")
+        self.render_js_checkbox.setChecked(defaults.default_render_js)
         self.render_js_checkbox.setToolTip(
             "Abre cada página en Chromium para comparar HTML crudo vs renderizado y mobile vs desktop. "
             "Si el sitio es una app JavaScript, el crawler lo activa solo aunque no marques esta casilla."
@@ -286,6 +303,10 @@ class MainWindow(QMainWindow):
         return outer
 
     def _start_crawl(self) -> None:
+        if self._worker is not None and self._worker.isRunning():
+            self.statusBar().showMessage("Ya hay un crawl en curso.")
+            return
+
         seed_url = self.url_input.text().strip()
         if not seed_url:
             QMessageBox.warning(self, "Spidermapp", "Ingresa una URL para comenzar.")
@@ -532,12 +553,20 @@ class MainWindow(QMainWindow):
         QApplication.clipboard().setText("\n".join(rows))
         self.statusBar().showMessage(f"{self.proxy_model.rowCount()} filas copiadas como CSV.")
 
-    def _open_connectors_dialog(self) -> None:
-        dialog = ConnectorsDialog(self)
-        if dialog.exec():
-            self.statusBar().showMessage("Conectores guardados.")
-            if self._last_result is not None:
-                self.llm_tab.set_crawl_data(self._last_result.seed_url, self._all_pages)
+    def _open_settings_dialog(self) -> None:
+        dialog = SettingsDialog(self)
+        if not dialog.exec():
+            return
+        self.statusBar().showMessage("Configuración guardada.")
+
+        settings = app_settings.load_settings()
+        self.max_pages_input.setValue(settings.default_max_pages)
+        self.max_depth_input.setValue(settings.default_max_depth)
+        self.concurrency_input.setValue(settings.default_concurrency)
+        self.render_js_checkbox.setChecked(settings.default_render_js)
+
+        if self._last_result is not None:
+            self.llm_tab.set_crawl_data(self._last_result.seed_url, self._all_pages)
 
     def _open_history_dialog(self) -> None:
         dialog = HistoryDialog(self)
@@ -668,9 +697,4 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(f"{len(written)} informes generados en {directory}.")
 
     def _show_about(self) -> None:
-        QMessageBox.about(
-            self,
-            "Acerca de Spidermapp",
-            "Spidermapp 0.2\n\nAuditor de SEO de escritorio: crawler asíncrono, checks técnicos, "
-            "mapa del sitio, informes por área y visibilidad en LLMs.",
-        )
+        AboutDialog(self).exec()

@@ -6,7 +6,7 @@ from PyInstaller.utils.hooks import collect_all
 PROJECT_ROOT = os.path.join(SPECPATH, "..")
 ICON_PATH = os.path.join(SPECPATH, "icon", "Spidermapp.icns")
 
-datas = []
+datas = [(os.path.join(PROJECT_ROOT, "spidermapp", "assets"), os.path.join("spidermapp", "assets"))]
 binaries = []
 hiddenimports = []
 
