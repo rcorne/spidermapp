@@ -77,29 +77,47 @@ def domain_mentioned(answer: str, seed_url: str) -> bool:
 def build_queries(site_keywords: list[str], seed_url: str, max_queries: int = MAX_QUERIES) -> list[str]:
     """Natural questions a user would ask an assistant, derived from the
     site's top on-page keywords. The domain itself is never included in the
-    prompt — that would trivially bias the answer."""
+    prompt — that would trivially bias the answer. Every query embeds a real
+    topic term; there is no context-free fallback, since a question like
+    "recommend something in this category" means nothing to the LLM if it
+    was never told what the category is."""
     brand_terms = [_normalize(t) for t in _brand_terms(seed_url)]
+
+    def strip_brand(term: str) -> str:
+        words = [w for w in term.split() if _normalize(w) not in brand_terms]
+        return " ".join(words).strip()
+
     queries: list[str] = []
     for kw in site_keywords:
-        if any(term and term in _normalize(kw) for term in brand_terms):
-            continue  # keyword contains the brand; skip to keep the test honest
-        queries.append(f"¿Cuáles son los mejores sitios web o marcas para «{kw}»? Nombra varios.")
+        cleaned = strip_brand(kw)
+        if not cleaned or len(cleaned) < 3:
+            continue  # keyword was only the brand name itself; nothing left to ask about
+        queries.append(f"¿Cuáles son los mejores sitios web o marcas para «{cleaned}»? Nombra varios.")
         if len(queries) >= max_queries:
             break
-    if not queries:
-        queries.append("¿Qué sitios web recomendarías en esta categoría? Nombra varios.")
     return queries
 
 
 def top_site_keywords(pages, limit: int = 6) -> list[str]:
-    """Most repeated per-page keywords across the crawl (crude site topic model)."""
+    """Most repeated per-page keywords across the crawl (crude site topic
+    model). Thin crawls (few pages, or every page's on-page keyword signal
+    empty) fall back to the homepage's own title/H1/meta description, so
+    there is always a concrete topic to ask an LLM about instead of a
+    context-free question."""
     from collections import Counter
+
+    from spidermapp.core import keywords as keywords_mod
 
     counts: Counter = Counter()
     for page in pages:
         for kw in page.keywords:
             counts[kw] += 1
-    return [kw for kw, _ in counts.most_common(limit)]
+    top = [kw for kw, _ in counts.most_common(limit)]
+    if top or not pages:
+        return top
+
+    homepage = next((p for p in pages if getattr(p, "depth", None) == 0), pages[0])
+    return keywords_mod.extract_keywords(homepage.title, homepage.h1, homepage.meta_description, "", top_n=limit)
 
 
 def run_visibility_check(seed_url: str, site_keywords: list[str]) -> LlmVisibilityReport:

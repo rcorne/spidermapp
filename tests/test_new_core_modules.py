@@ -90,6 +90,40 @@ def test_build_queries_skips_brand_keywords():
     assert any("farmacia online" in q for q in queries)
 
 
+def test_build_queries_drops_keyword_that_is_only_the_brand_name():
+    queries = llm_visibility.build_queries(["cruzverde", "farmacia online"], "https://cruzverde.com.co")
+    assert len(queries) == 1
+    assert "farmacia online" in queries[0]
+
+
+def test_build_queries_never_emits_context_free_fallback():
+    # No usable keywords at all: every generated query must name a real
+    # topic, never a bare "recommend something in this category" question
+    # that gives the LLM zero context about what "this category" even is.
+    queries = llm_visibility.build_queries([], "https://cruzverde.com.co")
+    assert queries == []
+    assert not any("esta categoría" in q for q in queries)
+
+
+def test_top_site_keywords_falls_back_to_homepage_signals_when_pages_have_no_keywords():
+    homepage = PageResult(
+        url="https://cruzverde.com.co/",
+        depth=0,
+        title="Farmacia online de medicamentos y belleza",
+        h1=["Farmacia online"],
+        meta_description="Compra medicamentos y productos de belleza en nuestra farmacia online.",
+        keywords=[],
+    )
+    other = PageResult(url="https://cruzverde.com.co/x", depth=1, keywords=[])
+    result = llm_visibility.top_site_keywords([homepage, other])
+    assert result
+    assert any("farmacia" in kw for kw in result)
+
+
+def test_top_site_keywords_returns_empty_for_no_pages():
+    assert llm_visibility.top_site_keywords([]) == []
+
+
 def test_run_visibility_check_without_keys_reports_unconfigured(tmp_path, monkeypatch):
     monkeypatch.setattr(connectors, "CONFIG_PATH", tmp_path / "connectors.json")
     report = llm_visibility.run_visibility_check("https://example.com", ["farmacia online"])
