@@ -29,7 +29,6 @@ from spidermapp.core import app_settings, export, history, pdf_report, reports
 from spidermapp.core.models import CrawlConfig, CrawlResult, IssueCategory, PageResult
 from spidermapp.gui import theme
 from spidermapp.gui.about_dialog import AboutDialog
-from spidermapp.gui.crawl_settings_dialog import CrawlSettingsDialog
 from spidermapp.gui.crawl_worker import CrawlWorker
 from spidermapp.gui.dashboard import DashboardTab
 from spidermapp.gui.detail_panel import DetailPanel
@@ -66,20 +65,11 @@ class MainWindow(QMainWindow):
         self._previous_snapshot = None
         self._pages_since_sitemap_refresh = 0
 
-        # Advanced crawl options set once via Análisis → Configuración del
-        # rastreo…, kept separate from the quick controls in the toolbar
-        # (páginas, profundidad, hilos, renderizar JS) that get touched on
-        # nearly every crawl.
-        default_config = CrawlConfig(seed_url="")
-        self._crawl_advanced: dict = {
-            "respect_robots": default_config.respect_robots,
-            "include_subdomains": default_config.include_subdomains,
-            "user_agent": default_config.user_agent,
-            "max_url_length": default_config.max_url_length,
-            "exclude_patterns": list(default_config.exclude_patterns),
-            "priority_urls": list(default_config.priority_urls),
-            "request_timeout": default_config.request_timeout,
-        }
+        # Advanced crawl options, set once via Archivo → Preferencias and
+        # persisted alongside every other setting — kept separate from the
+        # quick controls in the toolbar (páginas, profundidad, hilos,
+        # renderizar JS) that get touched on nearly every crawl.
+        self._crawl_advanced: dict = self._load_crawl_advanced()
 
         self.table_model = PageTableModel(self)
         self.proxy_model = IssueFilterProxyModel(self)
@@ -147,10 +137,10 @@ class MainWindow(QMainWindow):
         archivo = menubar.addMenu("Archivo")
         action(archivo, "Nuevo crawl…", self._menu_new_crawl, "Ctrl+N")
         action(archivo, "Abrir crawl guardado…", self._open_history_dialog, "Ctrl+O")
-        # Configuración… and Salir carry PreferencesRole/QuitRole below, so
+        # Preferencias… and Salir carry PreferencesRole/QuitRole below, so
         # macOS pulls them into the native app menu — no separators needed
         # here since nothing custom is left to separate them from.
-        action(archivo, "Configuración…", self._open_settings_dialog, "Ctrl+,", role=QAction.MenuRole.PreferencesRole)
+        action(archivo, "Preferencias…", self._open_settings_dialog, "Ctrl+,", role=QAction.MenuRole.PreferencesRole)
         action(archivo, "Salir", QApplication.instance().quit, "Ctrl+Q", role=QAction.MenuRole.QuitRole)
 
         edicion = menubar.addMenu("Edición")
@@ -160,8 +150,6 @@ class MainWindow(QMainWindow):
         analisis = menubar.addMenu("Análisis")
         action(analisis, "Iniciar crawl", self._start_crawl, "Ctrl+R")
         action(analisis, "Detener crawl", self._stop_crawl, "Ctrl+.")
-        analisis.addSeparator()
-        action(analisis, "Configuración del rastreo…", self._open_crawl_settings_dialog)
         analisis.addSeparator()
         action(analisis, "Comparar con crawl anterior", self._compare_with_previous)
         action(analisis, "Historial de crawls…", self._open_history_dialog)
@@ -572,27 +560,33 @@ class MainWindow(QMainWindow):
         QApplication.clipboard().setText("\n".join(rows))
         self.statusBar().showMessage(f"{self.proxy_model.rowCount()} filas copiadas como CSV.")
 
+    def _load_crawl_advanced(self) -> dict:
+        settings = app_settings.load_settings()
+        return {
+            "respect_robots": settings.default_respect_robots,
+            "include_subdomains": settings.default_include_subdomains,
+            "user_agent": settings.default_user_agent,
+            "max_url_length": settings.default_max_url_length,
+            "exclude_patterns": list(settings.default_exclude_patterns),
+            "priority_urls": list(settings.default_priority_urls),
+            "request_timeout": settings.default_request_timeout,
+        }
+
     def _open_settings_dialog(self) -> None:
         dialog = SettingsDialog(self)
         if not dialog.exec():
             return
-        self.statusBar().showMessage("Configuración guardada.")
+        self.statusBar().showMessage("Preferencias guardadas.")
 
         settings = app_settings.load_settings()
         self.max_pages_input.setValue(settings.default_max_pages)
         self.max_depth_input.setValue(settings.default_max_depth)
         self.concurrency_input.setValue(settings.default_concurrency)
         self.render_js_checkbox.setChecked(settings.default_render_js)
+        self._crawl_advanced = self._load_crawl_advanced()
 
         if self._last_result is not None:
             self.llm_tab.set_crawl_data(self._last_result.seed_url, self._all_pages)
-
-    def _open_crawl_settings_dialog(self) -> None:
-        dialog = CrawlSettingsDialog(self._crawl_advanced, self)
-        if not dialog.exec():
-            return
-        self._crawl_advanced = dialog.result_config()
-        self.statusBar().showMessage("Configuración del rastreo guardada.")
 
     def _open_history_dialog(self) -> None:
         dialog = HistoryDialog(self)
