@@ -103,7 +103,19 @@ class Crawler:
 
             if self.config.render_js:
                 await self._status("Iniciando navegador para renderizado JS…")
-                await self._start_browser()
+                try:
+                    await self._start_browser()
+                except Exception as exc:  # noqa: BLE001 - Chromium missing/blocked; degrade gracefully
+                    result.site_issues.append(
+                        Issue(
+                            IssueCategory.RENDERING,
+                            IssueSeverity.WARNING,
+                            "render_browser_unavailable",
+                            "No se pudo iniciar el navegador para renderizado JS, se continuó sin él: "
+                            f"{exc}. Ejecuta 'playwright install chromium' en una terminal.",
+                        )
+                    )
+                    await self._status("No se pudo iniciar el navegador; continuando sin renderizado JS…")
 
             try:
                 frontier: list[tuple[str, int]] = [(url_utils.normalize_url(self.config.seed_url), 0)]
@@ -164,7 +176,7 @@ class Crawler:
                 await self._status("Buscando páginas huérfanas del sitemap…")
                 await self._crawl_orphans(client, robots_info, semaphore, sitemap_urls, on_page, on_progress)
             finally:
-                if self._browser is not None:
+                if self._browser is not None or self._playwright is not None:
                     await self._stop_browser()
 
             for page in self.pages:

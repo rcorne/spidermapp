@@ -88,6 +88,11 @@ _RECOMMENDATIONS: dict[str, Recommendation] = {
         "El HTML inicial no contiene enlaces (aplicación JavaScript) y no se pudo iniciar Chromium para leer el DOM renderizado, así que el crawl no puede continuar más allá de esta página.",
         ["Ejecuta 'playwright install chromium' una vez en esta Mac.", "Vuelve a correr el crawl."],
     ),
+    "render_browser_unavailable": Recommendation(
+        "No se pudo iniciar el navegador de renderizado",
+        "Activaste 'Renderizar JS' pero Chromium no pudo iniciarse, así que el crawl siguió sin comparar HTML renderizado ni mobile vs desktop.",
+        ["Ejecuta 'playwright install chromium' en una terminal.", "Vuelve a correr el crawl con 'Renderizar JS' activado."],
+    ),
     "h1_multiple": Recommendation(
         "Hay más de un H1 en la página",
         "Múltiples H1 diluyen la señal de cuál es el tema principal de la página.",
