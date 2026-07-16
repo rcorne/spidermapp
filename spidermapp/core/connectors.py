@@ -112,18 +112,39 @@ def run_pagespeed(url: str, strategy: str = "mobile", timeout: float = 60.0) -> 
 
 LLM_PROVIDERS = ["openai", "anthropic", "gemini", "deepseek", "perplexity"]
 
+# Perplexity's "sonar" models are inherently grounded in live web search — that's
+# the product's whole premise, unlike the other providers' plain chat completion
+# endpoints, which answer only from trained (parametric) knowledge unless the
+# caller wires up separate tool-calling. Used to tag raw responses honestly for
+# the with/without-search comparison in brand_visibility.py, rather than faking
+# a toggle the other providers don't really support here.
+WEB_SEARCH_PROVIDERS = {"perplexity"}
+
 _LLM_TIMEOUT = 60.0
 
 
-def ask_llm(provider: str, prompt: str) -> str:
-    """Send one user prompt to the given provider and return the text answer."""
+def supports_web_search(provider: str) -> bool:
+    return provider in WEB_SEARCH_PROVIDERS
+
+
+def ask_llm(provider: str, prompt: str, temperature: float = 0.7) -> str:
+    """Send one user prompt to the given provider and return the text answer.
+
+    Each call is a clean, stateless session: no conversation history and no
+    system prompt, by design — every call here is independent of any other.
+    """
     key = _require(provider)
 
     if provider == "openai":
         response = httpx.post(
             "https://api.openai.com/v1/chat/completions",
             headers={"Authorization": f"Bearer {key}"},
-            json={"model": "gpt-4o-mini", "messages": [{"role": "user", "content": prompt}], "max_tokens": 700},
+            json={
+                "model": "gpt-4o-mini",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 700,
+                "temperature": temperature,
+            },
             timeout=_LLM_TIMEOUT,
         )
         response.raise_for_status()
@@ -136,6 +157,7 @@ def ask_llm(provider: str, prompt: str) -> str:
             json={
                 "model": "claude-haiku-4-5-20251001",
                 "max_tokens": 700,
+                "temperature": temperature,
                 "messages": [{"role": "user", "content": prompt}],
             },
             timeout=_LLM_TIMEOUT,
@@ -148,7 +170,10 @@ def ask_llm(provider: str, prompt: str) -> str:
         response = httpx.post(
             "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent",
             params={"key": key},
-            json={"contents": [{"parts": [{"text": prompt}]}]},
+            json={
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"temperature": temperature},
+            },
             timeout=_LLM_TIMEOUT,
         )
         response.raise_for_status()
@@ -162,7 +187,12 @@ def ask_llm(provider: str, prompt: str) -> str:
         response = httpx.post(
             "https://api.deepseek.com/chat/completions",
             headers={"Authorization": f"Bearer {key}"},
-            json={"model": "deepseek-chat", "messages": [{"role": "user", "content": prompt}], "max_tokens": 700},
+            json={
+                "model": "deepseek-chat",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 700,
+                "temperature": temperature,
+            },
             timeout=_LLM_TIMEOUT,
         )
         response.raise_for_status()
@@ -172,7 +202,12 @@ def ask_llm(provider: str, prompt: str) -> str:
         response = httpx.post(
             "https://api.perplexity.ai/chat/completions",
             headers={"Authorization": f"Bearer {key}"},
-            json={"model": "sonar", "messages": [{"role": "user", "content": prompt}], "max_tokens": 700},
+            json={
+                "model": "sonar",
+                "messages": [{"role": "user", "content": prompt}],
+                "max_tokens": 700,
+                "temperature": temperature,
+            },
             timeout=_LLM_TIMEOUT,
         )
         response.raise_for_status()

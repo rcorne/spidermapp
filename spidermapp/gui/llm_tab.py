@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from spidermapp.core import ai_visibility, connectors, llm_visibility
 from spidermapp.gui import theme
+from spidermapp.gui.brand_visibility_dialog import BrandVisibilityDialog
 from spidermapp.gui.dashboard import _fact_pill
 
 
@@ -93,6 +94,7 @@ class LlmVisibilityTab(QWidget):
 
         self._build_readiness_section(layout)
         self._build_llm_query_section(layout)
+        self._build_brand_visibility_section(layout)
         layout.addStretch(1)
 
     # ---------- Section 1: público, sin API ----------
@@ -323,3 +325,35 @@ class LlmVisibilityTab(QWidget):
             verdict.setForeground(QColor(color))
             self.table.setItem(row, 2, verdict)
             self.table.setItem(row, 3, QTableWidgetItem(r.error or r.answer_excerpt))
+
+    # ---------- Section 3: análisis de marca vs. competidores ----------
+
+    def _build_brand_visibility_section(self, layout: QVBoxLayout) -> None:
+        rule = QFrame()
+        rule.setFrameShape(QFrame.Shape.HLine)
+        rule.setStyleSheet("color: #E5E7EB; margin: 10px 0;")
+        layout.addWidget(rule)
+
+        header = QLabel("Analizador de visibilidad de marca en LLMs")
+        header.setStyleSheet("font-size: 14px; font-weight: 700; color: #111827;")
+        layout.addWidget(header)
+
+        row = QHBoxLayout()
+        sub = QLabel(
+            "Mide, con muestreo repetido y estadístico, la tasa de mención, posición, share of voice y "
+            "framing de tu marca frente a competidores en varios LLMs — con tracking longitudinal entre "
+            "corridas. Requiere claves API configuradas."
+        )
+        sub.setWordWrap(True)
+        sub.setStyleSheet("font-size: 11.5px; color: #6B7280;")
+        row.addWidget(sub, stretch=1)
+
+        open_button = QPushButton("Abrir analizador de marca…")
+        open_button.setStyleSheet(theme.BUTTON_PRIMARY_QSS)
+        open_button.clicked.connect(self._open_brand_visibility_dialog)
+        row.addWidget(open_button)
+        layout.addLayout(row)
+
+    def _open_brand_visibility_dialog(self) -> None:
+        dialog = BrandVisibilityDialog(self)
+        dialog.exec()
