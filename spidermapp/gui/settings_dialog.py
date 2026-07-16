@@ -22,6 +22,12 @@ from spidermapp.core import app_settings, connectors
 from spidermapp.gui.crawl_settings_widgets import USER_AGENT_PRESETS, EditableUrlList, hint
 
 
+def _section_header(text: str) -> QLabel:
+    label = QLabel(text)
+    label.setStyleSheet("font-size: 12px; font-weight: 700; color: #374151; margin-top: 10px;")
+    return label
+
+
 class SettingsDialog(QDialog):
     """Every Spidermapp setting, in one window: crawl defaults, advanced
     crawl behavior, and every external API key. Archivo → Preferencias
@@ -94,23 +100,44 @@ class SettingsDialog(QDialog):
     # ------------------------------------------------------------------
 
     def _build_scope_tab(self, settings: app_settings.AppSettings) -> QWidget:
+        outer_widget = QWidget()
+        outer = QVBoxLayout(outer_widget)
+        outer.setContentsMargins(0, 0, 0, 0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(scroll.Shape.NoFrame)
+        outer.addWidget(scroll)
+
         widget = QWidget()
+        scroll.setWidget(widget)
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(16, 16, 16, 16)
 
-        layout.addWidget(hint("Reglas que el sitio ya publica y alcance del dominio."))
-
+        layout.addWidget(_section_header("Reglas del sitio"))
         self.respect_robots_check = QCheckBox("Respetar robots.txt")
         self.respect_robots_check.setChecked(settings.default_respect_robots)
-        self.respect_robots_check.setToolTip("Si lo desmarcas, el rastreo ignora las reglas Disallow del sitio — úsalo solo si sabes lo que haces.")
         layout.addWidget(self.respect_robots_check)
+        layout.addWidget(hint("El sitio publica en /robots.txt qué rutas no quiere que rastreen bots. Si lo desmarcas, el rastreo las visita igual — úsalo solo si sabes lo que haces."))
 
         self.include_subdomains_check = QCheckBox("Incluir subdominios")
         self.include_subdomains_check.setChecked(settings.default_include_subdomains)
-        self.include_subdomains_check.setToolTip("Trata blog.ejemplo.com, tienda.ejemplo.com, etc. como parte del mismo rastreo.")
         layout.addWidget(self.include_subdomains_check)
+        layout.addWidget(hint("Trata blog.ejemplo.com, tienda.ejemplo.com, etc. como parte del mismo rastreo que ejemplo.com, en vez de ignorarlos."))
 
-        layout.addWidget(hint("User-Agent con el que el rastreador se identifica ante el servidor."))
+        layout.addWidget(_section_header("Alcance del rastreo"))
+        self.limit_to_start_folder_check = QCheckBox("Limitar a la carpeta de inicio")
+        self.limit_to_start_folder_check.setChecked(settings.default_limit_to_start_folder)
+        layout.addWidget(self.limit_to_start_folder_check)
+        layout.addWidget(hint("Si la URL semilla es ejemplo.com/blog/, solo rastrea dentro de /blog/ — ignora el resto del sitio aunque esté enlazado desde ahí. Útil para auditar una sola sección."))
+
+        self.follow_nofollow_check = QCheckBox("Seguir enlaces marcados como \"nofollow\"")
+        self.follow_nofollow_check.setChecked(settings.default_follow_nofollow)
+        layout.addWidget(self.follow_nofollow_check)
+        layout.addWidget(hint("rel=\"nofollow\" le pide a los motores de búsqueda que no sigan ese enlace. Desmárcalo para que el rastreo se comporte como Google: no seguir esos enlaces."))
+
+        layout.addWidget(_section_header("Identificación"))
+        layout.addWidget(hint("User-Agent con el que el rastreador se identifica ante el servidor. Algunos sitios bloquean o sirven contenido distinto según este valor."))
         ua_row = QHBoxLayout()
         self.user_agent_combo = QComboBox()
         self.user_agent_combo.addItems(list(USER_AGENT_PRESETS.keys()) + ["Personalizado"])
@@ -127,7 +154,7 @@ class SettingsDialog(QDialog):
         layout.addWidget(self.user_agent_input)
 
         layout.addStretch(1)
-        return widget
+        return outer_widget
 
     def _on_user_agent_preset_changed(self, name: str) -> None:
         if name in USER_AGENT_PRESETS:
@@ -141,11 +168,23 @@ class SettingsDialog(QDialog):
     # ------------------------------------------------------------------
 
     def _build_limits_tab(self, settings: app_settings.AppSettings) -> QWidget:
+        outer_widget = QWidget()
+        outer = QVBoxLayout(outer_widget)
+        outer.setContentsMargins(0, 0, 0, 0)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(scroll.Shape.NoFrame)
+        outer.addWidget(scroll)
+
         widget = QWidget()
+        scroll.setWidget(widget)
         layout = QVBoxLayout(widget)
         layout.setContentsMargins(16, 16, 16, 16)
 
-        layout.addWidget(hint("URLs más largas que este límite no se rastrean (0 = sin límite). Útil para evitar trampas de parámetros infinitos."))
+        layout.addWidget(_section_header("Trampas de rastreo"))
+        layout.addWidget(hint("Sitios con filtros, calendarios o sesiones pueden generar URLs infinitas. Estos dos límites cortan esas trampas antes de que consuman todo el presupuesto de páginas."))
+
         length_row = QHBoxLayout()
         length_row.addWidget(QLabel("Longitud máxima de URL:"))
         self.max_url_length_spin = QSpinBox()
@@ -153,9 +192,34 @@ class SettingsDialog(QDialog):
         self.max_url_length_spin.setSingleStep(50)
         self.max_url_length_spin.setValue(settings.default_max_url_length)
         length_row.addWidget(self.max_url_length_spin)
+        length_row.addWidget(QLabel("caracteres (0 = sin límite)"))
         length_row.addStretch(1)
         layout.addLayout(length_row)
 
+        query_row = QHBoxLayout()
+        query_row.addWidget(QLabel("Máx. parámetros de consulta por URL:"))
+        self.max_query_params_spin = QSpinBox()
+        self.max_query_params_spin.setRange(0, 50)
+        self.max_query_params_spin.setValue(settings.default_max_query_params)
+        query_row.addWidget(self.max_query_params_spin)
+        query_row.addWidget(QLabel("(0 = sin límite)"))
+        query_row.addStretch(1)
+        layout.addLayout(query_row)
+        layout.addWidget(hint("Ej: ejemplo.com/tienda?color=azul&talla=m&orden=precio tiene 3 parámetros. Un límite bajo evita rastrear cada combinación de filtros como si fuera una página distinta."))
+
+        links_row = QHBoxLayout()
+        links_row.addWidget(QLabel("Máx. enlaces a seguir por página:"))
+        self.max_links_per_page_spin = QSpinBox()
+        self.max_links_per_page_spin.setRange(0, 10000)
+        self.max_links_per_page_spin.setSingleStep(10)
+        self.max_links_per_page_spin.setValue(settings.default_max_links_per_page)
+        links_row.addWidget(self.max_links_per_page_spin)
+        links_row.addWidget(QLabel("(0 = sin límite)"))
+        links_row.addStretch(1)
+        layout.addLayout(links_row)
+        layout.addWidget(hint('Limita cuántos enlaces nuevos se toman de una sola página. Útil si el sitio tiene páginas "hub" con miles de enlaces (ej. un índice de etiquetas) que no quieres que dominen el rastreo.'))
+
+        layout.addWidget(_section_header("Exclusión y prioridad"))
         layout.addWidget(hint("Excluir por patrón (expresión regular). Ninguna URL que coincida se rastreará, ej. /wp-admin/ o \\.pdf$"))
         self.exclude_list = EditableUrlList("Ej: /carrito|\\?sessionid=", settings.default_exclude_patterns)
         layout.addWidget(self.exclude_list)
@@ -164,7 +228,8 @@ class SettingsDialog(QDialog):
         self.priority_list = EditableUrlList("Ej: https://ejemplo.com/categoria-clave", settings.default_priority_urls)
         layout.addWidget(self.priority_list)
 
-        return widget
+        layout.addStretch(1)
+        return outer_widget
 
     # ------------------------------------------------------------------
     # Avanzado: ajustes técnicos que casi nunca cambian
@@ -249,6 +314,10 @@ class SettingsDialog(QDialog):
                 default_request_timeout=self.timeout_spin.value(),
                 default_exclude_patterns=self.exclude_list.values(),
                 default_priority_urls=self.priority_list.values(),
+                default_limit_to_start_folder=self.limit_to_start_folder_check.isChecked(),
+                default_follow_nofollow=self.follow_nofollow_check.isChecked(),
+                default_max_query_params=self.max_query_params_spin.value(),
+                default_max_links_per_page=self.max_links_per_page_spin.value(),
             )
         )
         config = {key: field.text().strip() for key, field in self._connector_fields.items() if field.text().strip()}

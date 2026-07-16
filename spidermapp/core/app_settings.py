@@ -25,6 +25,10 @@ class AppSettings:
     default_request_timeout: float = 15.0
     default_exclude_patterns: list[str] = field(default_factory=list)
     default_priority_urls: list[str] = field(default_factory=list)
+    default_limit_to_start_folder: bool = False
+    default_follow_nofollow: bool = True
+    default_max_query_params: int = 0
+    default_max_links_per_page: int = 0
 
 
 def load_settings(path: Path = SETTINGS_PATH) -> AppSettings:

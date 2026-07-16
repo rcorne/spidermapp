@@ -4,7 +4,7 @@ import asyncio
 import re
 import time
 from typing import Awaitable, Callable, Optional, Union
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 import httpx
 from bs4 import BeautifulSoup
@@ -84,14 +84,33 @@ class Crawler:
                 self._exclude_regexes.append(re.compile(pattern))
             except re.error:
                 continue  # invalid pattern from the user: ignore rather than crash the crawl
+        # Path prefix a URL must stay under when "limitar a la carpeta de
+        # inicio" is on, e.g. seed https://x.com/blog/ → only /blog/... URLs.
+        self._start_folder = urlparse(config.seed_url).path.rsplit("/", 1)[0] + "/" if config.limit_to_start_folder else ""
 
     def _url_allowed(self, url: str) -> bool:
-        """Applies the "Límites" config (exclude patterns, max URL length)
-        at every point new URLs are discovered, before they enter the
-        frontier — never after they've already been fetched."""
+        """Applies the "Límites" config (exclude patterns, max URL length,
+        máx. parámetros de consulta, carpeta de inicio) at every point new
+        URLs are discovered, before they enter the frontier — never after
+        they've already been fetched."""
         if self.config.max_url_length and len(url) > self.config.max_url_length:
             return False
-        return not any(regex.search(url) for regex in self._exclude_regexes)
+        if any(regex.search(url) for regex in self._exclude_regexes):
+            return False
+        parsed = urlparse(url)
+        if self.config.max_query_params and len(parse_qs(parsed.query)) > self.config.max_query_params:
+            return False
+        if self._start_folder and not parsed.path.startswith(self._start_folder):
+            return False
+        return True
+
+    def _link_allowed(self, link: LinkEdge) -> bool:
+        """rel="nofollow" gate, applied alongside _url_allowed at every
+        discovery point — separate check because it reads the <a> tag's
+        rel attribute rather than the URL itself."""
+        if not self.config.follow_nofollow and "nofollow" in link.rel.lower():
+            return False
+        return self._url_allowed(link.target)
 
     async def _status(self, message: str) -> None:
         await _maybe_await(self._on_status, message)
@@ -236,13 +255,15 @@ class Crawler:
                 seed_page.final_url or seed_page.url, link.target, include_subdomains=False
             ):
                 continue
-            if not self._url_allowed(link.target):
+            if not self._link_allowed(link):
                 continue
             if link.target in self.visited:
                 continue
             self.visited.add(link.target)
             self.inlinks.setdefault(link.target, set()).add(seed_page.final_url or seed_page.url)
             frontier.append((link.target, 1))
+            if self.config.max_links_per_page and len(frontier) >= self.config.max_links_per_page:
+                break
         return frontier
 
     async def _fetch_robots(self, client: httpx.AsyncClient) -> robots.RobotsInfo:
@@ -427,9 +448,11 @@ class Crawler:
                         page.final_url, link.target, include_subdomains=False
                     ):
                         continue
-                    if not self._url_allowed(link.target):
+                    if not self._link_allowed(link):
                         continue
                     discovered.append((link.target, depth + 1))
+                    if self.config.max_links_per_page and len(discovered) >= self.config.max_links_per_page:
+                        break
 
             page.issues = issues_mod.collect_page_issues(page, self.priority_urls)
             return page, discovered

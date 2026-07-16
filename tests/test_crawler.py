@@ -104,6 +104,127 @@ async def test_crawl_respects_max_url_length():
     assert "https://example.test/" in urls
 
 
+async def test_crawl_respects_max_links_per_page():
+    # PAGE_HOME links to /about then /contact, in that order; PAGE_ABOUT
+    # links to / then /missing. A cap of 1 keeps only the first outlink
+    # discovered per page, so /contact and /missing never get queued.
+    config = CrawlConfig(seed_url="https://example.test/", max_pages=50, max_links_per_page=1)
+    result = await crawler_mod.crawl(config)
+    urls = {p.url for p in result.pages}
+    assert urls == {"https://example.test/", "https://example.test/about"}
+
+
+async def test_crawl_limits_to_start_folder(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = request.url
+        if url.path == "/robots.txt" or url.path == "/sitemap.xml":
+            return httpx.Response(404)
+        if url.path == "/blog/":
+            return httpx.Response(
+                200,
+                content='<html><body><a href="/blog/post">Post</a><a href="/outside">Fuera</a></body></html>',
+                headers={"content-type": "text/html"},
+            )
+        if url.path == "/blog/post":
+            return httpx.Response(200, content="<html><body>Post</body></html>", headers={"content-type": "text/html"})
+        return httpx.Response(200, content="<html><body>Fuera de la carpeta</body></html>", headers={"content-type": "text/html"})
+
+    transport = httpx.MockTransport(handler)
+
+    def patched_client(*args, **kwargs):
+        kwargs["transport"] = transport
+        return _REAL_ASYNC_CLIENT(*args, **kwargs)
+
+    monkeypatch.setattr(crawler_mod.httpx, "AsyncClient", patched_client)
+
+    config = CrawlConfig(seed_url="https://example.test/blog/", max_pages=50, limit_to_start_folder=True)
+    result = await crawler_mod.crawl(config)
+    urls = {p.url for p in result.pages}
+    assert "https://example.test/blog/post" in urls
+    assert "https://example.test/outside" not in urls
+
+
+async def test_crawl_respects_max_query_params(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = request.url
+        if url.path in ("/robots.txt", "/sitemap.xml"):
+            return httpx.Response(404)
+        if url.path == "/":
+            return httpx.Response(
+                200,
+                content='<html><body><a href="/search?a=1&b=2&c=3">Buscar</a></body></html>',
+                headers={"content-type": "text/html"},
+            )
+        return httpx.Response(200, content="<html><body>ok</body></html>", headers={"content-type": "text/html"})
+
+    transport = httpx.MockTransport(handler)
+
+    def patched_client(*args, **kwargs):
+        kwargs["transport"] = transport
+        return _REAL_ASYNC_CLIENT(*args, **kwargs)
+
+    monkeypatch.setattr(crawler_mod.httpx, "AsyncClient", patched_client)
+
+    config = CrawlConfig(seed_url="https://example.test/", max_pages=50, max_query_params=2)
+    result = await crawler_mod.crawl(config)
+    urls = {p.url for p in result.pages}
+    assert not any("search" in u for u in urls)
+
+
+async def test_crawl_does_not_follow_nofollow_links_when_disabled(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = request.url
+        if url.path in ("/robots.txt", "/sitemap.xml"):
+            return httpx.Response(404)
+        if url.path == "/":
+            return httpx.Response(
+                200,
+                content='<html><body><a href="/tracked" rel="nofollow">Externo</a></body></html>',
+                headers={"content-type": "text/html"},
+            )
+        return httpx.Response(200, content="<html><body>ok</body></html>", headers={"content-type": "text/html"})
+
+    transport = httpx.MockTransport(handler)
+
+    def patched_client(*args, **kwargs):
+        kwargs["transport"] = transport
+        return _REAL_ASYNC_CLIENT(*args, **kwargs)
+
+    monkeypatch.setattr(crawler_mod.httpx, "AsyncClient", patched_client)
+
+    config = CrawlConfig(seed_url="https://example.test/", max_pages=50, follow_nofollow=False)
+    result = await crawler_mod.crawl(config)
+    urls = {p.url for p in result.pages}
+    assert "https://example.test/tracked" not in urls
+
+
+async def test_crawl_follows_nofollow_links_by_default(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = request.url
+        if url.path in ("/robots.txt", "/sitemap.xml"):
+            return httpx.Response(404)
+        if url.path == "/":
+            return httpx.Response(
+                200,
+                content='<html><body><a href="/tracked" rel="nofollow">Externo</a></body></html>',
+                headers={"content-type": "text/html"},
+            )
+        return httpx.Response(200, content="<html><body>ok</body></html>", headers={"content-type": "text/html"})
+
+    transport = httpx.MockTransport(handler)
+
+    def patched_client(*args, **kwargs):
+        kwargs["transport"] = transport
+        return _REAL_ASYNC_CLIENT(*args, **kwargs)
+
+    monkeypatch.setattr(crawler_mod.httpx, "AsyncClient", patched_client)
+
+    config = CrawlConfig(seed_url="https://example.test/", max_pages=50)
+    result = await crawler_mod.crawl(config)
+    urls = {p.url for p in result.pages}
+    assert "https://example.test/tracked" in urls
+
+
 async def test_crawl_flags_404_page():
     config = CrawlConfig(seed_url="https://example.test/", max_pages=50)
     result = await crawler_mod.crawl(config)

@@ -58,6 +58,10 @@ class CrawlConfig:
     include_subdomains: bool = False
     exclude_patterns: list[str] = field(default_factory=list)
     max_url_length: int = 0  # 0 = sin límite
+    limit_to_start_folder: bool = False
+    follow_nofollow: bool = True
+    max_query_params: int = 0  # 0 = sin límite
+    max_links_per_page: int = 0  # 0 = sin límite
 
 
 @dataclass

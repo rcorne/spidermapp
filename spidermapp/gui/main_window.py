@@ -570,6 +570,10 @@ class MainWindow(QMainWindow):
             "exclude_patterns": list(settings.default_exclude_patterns),
             "priority_urls": list(settings.default_priority_urls),
             "request_timeout": settings.default_request_timeout,
+            "limit_to_start_folder": settings.default_limit_to_start_folder,
+            "follow_nofollow": settings.default_follow_nofollow,
+            "max_query_params": settings.default_max_query_params,
+            "max_links_per_page": settings.default_max_links_per_page,
         }
 
     def _open_settings_dialog(self) -> None:
