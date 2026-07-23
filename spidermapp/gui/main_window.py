@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QSpinBox,
     QSplitter,
+    QStackedWidget,
     QStatusBar,
     QTableView,
     QTabWidget,
@@ -30,17 +31,20 @@ from spidermapp.core import app_settings, export, history, pdf_report, pptx_repo
 from spidermapp.core.models import CrawlConfig, CrawlResult, IssueCategory, PageResult
 from spidermapp.gui import paths, theme
 from spidermapp.gui.about_dialog import AboutDialog
+from spidermapp.gui.board_view import BoardView
 from spidermapp.gui.crawl_worker import CrawlWorker
 from spidermapp.gui.dashboard import DashboardTab
 from spidermapp.gui.detail_panel import DetailPanel
 from spidermapp.gui.history_dialog import HistoryDialog
 from spidermapp.gui.llm_tab import LlmVisibilityTab
 from spidermapp.gui.news_ticker import NewsTicker
+from spidermapp.gui.rail_nav import RailNav
 from spidermapp.gui.settings_dialog import SettingsDialog
 from spidermapp.gui.sidebar import ALL_KEY, DUPLICATES_KEY, ISSUES_KEY, ORPHANS_KEY, Sidebar
 from spidermapp.gui.sitemap_view import SiteMapTab
 from spidermapp.gui.structure_view import StructureTab
 from spidermapp.gui.table_model import IssueFilterProxyModel, PageTableModel
+from spidermapp.gui.today_view import TodayView
 
 SITEMAP_REFRESH_EVERY_N_PAGES = 15
 MAX_CRAWL_PAGES = 10000
@@ -96,8 +100,24 @@ class MainWindow(QMainWindow):
 
         root_layout.addWidget(self._build_progress_row())
 
+        body_row = QHBoxLayout()
+        body_row.setContentsMargins(0, 0, 0, 0)
+        body_row.setSpacing(0)
+        root_layout.addLayout(body_row, stretch=1)
+
+        self.rail_nav = RailNav()
+        self.rail_nav.view_changed.connect(self._on_rail_view_changed)
+        body_row.addWidget(self.rail_nav)
+
+        self.view_stack = QStackedWidget()
+        body_row.addWidget(self.view_stack, stretch=1)
+
+        self.today_view = TodayView()
+        self.today_view.task_created.connect(lambda: self.board_view.refresh())
+        self.view_stack.addWidget(self.today_view)
+
         self.tabs = QTabWidget()
-        root_layout.addWidget(self.tabs, stretch=1)
+        self.view_stack.addWidget(self.tabs)
 
         self.dashboard_tab = DashboardTab()
         self.tabs.addTab(self.dashboard_tab, "Vista general")
@@ -119,8 +139,34 @@ class MainWindow(QMainWindow):
         self.news_ticker = NewsTicker()
         self.tabs.addTab(self.news_ticker, "Noticias SEO / IA")
 
+        self.board_view = BoardView()
+        self.view_stack.addWidget(self.board_view)
+
+        self.view_stack.setCurrentWidget(self.today_view)
+
         self.setStatusBar(QStatusBar())
         self.statusBar().showMessage("Listo.")
+
+    def _on_rail_view_changed(self, key: str) -> None:
+        if key == "hoy":
+            self.today_view.refresh()
+            self.view_stack.setCurrentWidget(self.today_view)
+        elif key == "tablero":
+            self.board_view.refresh()
+            self.view_stack.setCurrentWidget(self.board_view)
+        else:
+            self.view_stack.setCurrentWidget(self.tabs)
+
+    def _show_auditoria(self) -> None:
+        """Switches the rail to "Auditoría" — used whenever an action that
+        only makes sense there (starting a crawl, jumping to a table row)
+        is triggered while "Hoy" or "Tablero" happens to be showing."""
+        self.rail_nav.set_active("auditoria")
+        self.view_stack.setCurrentWidget(self.tabs)
+
+    def _show_llm_tab(self) -> None:
+        self._show_auditoria()
+        self.tabs.setCurrentWidget(self.llm_tab)
 
     def _cleanup_before_quit(self) -> None:
         """Qt fatally aborts the whole process if a QThread object gets
@@ -189,7 +235,7 @@ class MainWindow(QMainWindow):
         action(analisis, "Comparar con crawl anterior", self._compare_with_previous)
         action(analisis, "Historial de crawls…", self._open_history_dialog)
         analisis.addSeparator()
-        action(analisis, "Visibilidad en LLMs", lambda: self.tabs.setCurrentWidget(self.llm_tab))
+        action(analisis, "Visibilidad en LLMs", self._show_llm_tab)
         action(analisis, "PageSpeed de la URL semilla", self._run_pagespeed)
 
         exportar = menubar.addMenu("Exportar")
@@ -357,6 +403,7 @@ class MainWindow(QMainWindow):
             seed_url = f"https://{seed_url}"
             self.url_input.setText(seed_url)
 
+        self._show_auditoria()
         self.table_model.clear()
         self._all_pages = []
         self._pages_since_sitemap_refresh = 0
@@ -485,6 +532,7 @@ class MainWindow(QMainWindow):
         self.detail_panel.show_page(page)
 
     def _focus_url_in_table(self, url: str) -> None:
+        self._show_auditoria()
         self.tabs.setCurrentWidget(self.table_tab)
         self.proxy_model.set_filter_all()
         self.sidebar.setCurrentRow(0)
@@ -669,6 +717,7 @@ class MainWindow(QMainWindow):
             )
             return
 
+        self._show_auditoria()
         self.table_model.clear()
         for page in result.pages:
             self.table_model.upsert_page(page)

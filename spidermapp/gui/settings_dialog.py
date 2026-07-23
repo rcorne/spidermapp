@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from spidermapp.core import app_settings, connectors
+from spidermapp.gui.account_tab import AccountTab
 from spidermapp.gui.crawl_settings_widgets import USER_AGENT_PRESETS, EditableUrlList, hint
 
 
@@ -49,6 +50,7 @@ class SettingsDialog(QDialog):
         tabs.addTab(self._build_limits_tab(settings), "Límites")
         tabs.addTab(self._build_advanced_tab(settings), "Avanzado")
         tabs.addTab(self._build_connectors_tab(), "Conectores")
+        tabs.addTab(AccountTab(), "Cuenta")
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self._save)
