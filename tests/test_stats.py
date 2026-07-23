@@ -144,3 +144,27 @@ def test_summarize_site_infrastructure_separates_other_findings():
     ]
     infra = stats.summarize_site_infrastructure(["https://x.com/a"], site_issues)
     assert [i.code for i in infra.other_findings] == ["mixed_www"]
+
+
+def test_error_pages_includes_4xx_5xx_and_no_response():
+    ok = PageResult(url="https://x.com/ok", status_code=200)
+    not_found = PageResult(url="https://x.com/404", status_code=404)
+    server_error = PageResult(url="https://x.com/500", status_code=500)
+    no_response = PageResult(url="https://x.com/timeout", status_code=None, error="timeout")
+    pages = [ok, not_found, server_error, no_response]
+    result = stats.error_pages(pages)
+    assert {p.url for p in result} == {"https://x.com/404", "https://x.com/500", "https://x.com/timeout"}
+
+
+def test_error_pages_excludes_robots_blocked():
+    blocked = PageResult(url="https://x.com/blocked", status_code=None)
+    blocked.add_issue(IssueCategory.SITEMAP_ROBOTS, IssueSeverity.INFO, "blocked_by_robots", "msg")
+    assert stats.error_pages([blocked]) == []
+
+
+def test_error_pages_sorted_by_status_then_no_response_last():
+    a = PageResult(url="https://x.com/500", status_code=500)
+    b = PageResult(url="https://x.com/none", status_code=None)
+    c = PageResult(url="https://x.com/404", status_code=404)
+    result = stats.error_pages([a, b, c])
+    assert [p.url for p in result] == ["https://x.com/404", "https://x.com/500", "https://x.com/none"]

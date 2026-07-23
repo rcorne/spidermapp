@@ -3,6 +3,8 @@ from pptx import Presentation
 from spidermapp.core import pptx_report
 from spidermapp.core.models import CrawlResult, IssueCategory, IssueSeverity, PageResult
 
+BASE_SLIDE_COUNT = 7  # título, resumen, salud técnica, categorías, errores, oportunidades, cierre
+
 
 def _result():
     result = CrawlResult(seed_url="https://example.com/")
@@ -29,7 +31,7 @@ def test_generate_pptx_report_writes_valid_file(tmp_path):
     assert out.exists()
 
     prs = Presentation(str(out))
-    assert len(prs.slides) == 5  # título, resumen, categorías, oportunidades, cierre
+    assert len(prs.slides) == BASE_SLIDE_COUNT
 
 
 def test_generate_pptx_report_handles_empty_crawl(tmp_path):
@@ -38,7 +40,38 @@ def test_generate_pptx_report_handles_empty_crawl(tmp_path):
     path = pptx_report.generate_pptx_report(result, out)
     assert out.exists()
     prs = Presentation(str(out))
-    assert len(prs.slides) == 5
+    assert len(prs.slides) == BASE_SLIDE_COUNT
+
+
+def test_generate_pptx_report_adds_duplicates_slide_when_present(tmp_path):
+    result = _result()
+    result.duplicate_content_groups = {"hash1": ["https://example.com/a", "https://example.com/b"]}
+    out = tmp_path / "with_dupes.pptx"
+    pptx_report.generate_pptx_report(result, out)
+    prs = Presentation(str(out))
+    assert len(prs.slides) == BASE_SLIDE_COUNT + 1
+
+
+def test_generate_pptx_report_paginates_many_opportunities(tmp_path):
+    result = CrawlResult(seed_url="https://example.com/")
+    codes = [
+        ("title_missing", IssueCategory.TITLES),
+        ("meta_description_missing", IssueCategory.META),
+        ("canonical_missing", IssueCategory.CANONICALS),
+        ("noindex_page", IssueCategory.DIRECTIVES),
+        ("broken_internal_link", IssueCategory.LINKS),
+        ("redirect_chain", IssueCategory.REDIRECTS),
+    ]
+    for i, (code, category) in enumerate(codes):
+        page = PageResult(url=f"https://example.com/{i}", status_code=200)
+        page.add_issue(category, IssueSeverity.WARNING, code, "msg")
+        result.pages.append(page)
+
+    out = tmp_path / "many_opps.pptx"
+    pptx_report.generate_pptx_report(result, out)
+    prs = Presentation(str(out))
+    # 6 opportunities at 4-per-slide = 2 opportunity slides instead of 1.
+    assert len(prs.slides) == BASE_SLIDE_COUNT + 1
 
 
 def test_generate_pptx_report_slide_dimensions_are_widescreen(tmp_path):

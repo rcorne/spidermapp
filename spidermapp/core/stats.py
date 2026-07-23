@@ -76,6 +76,18 @@ def top_offenders(pages: list[PageResult], limit: int = 5) -> list[PageResult]:
     return [page for _, page in scored[:limit]]
 
 
+def error_pages(pages: list[PageResult]) -> list[PageResult]:
+    """Every page that failed outright (4xx/5xx or no response at all),
+    excluding robots.txt-blocked URLs — those were never really "attempted".
+    Sorted by ascending status code, with no-response failures listed last."""
+    failed = [
+        p for p in pages
+        if not any(i.code == "blocked_by_robots" for i in p.issues) and (p.status_code is None or p.status_code >= 400)
+    ]
+    failed.sort(key=lambda p: (p.status_code is None, p.status_code or 0))
+    return failed
+
+
 def compute_crawl_budget(pages: list[PageResult]) -> CrawlBudget:
     budget = CrawlBudget(total_pages=len(pages))
     for page in pages:

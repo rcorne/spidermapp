@@ -35,7 +35,7 @@ from PySide6.QtWidgets import (
 
 from spidermapp.core import brand_visibility as bv
 from spidermapp.core import connectors
-from spidermapp.gui import theme
+from spidermapp.gui import paths, theme
 
 MIN_COMPETITORS = 2
 MAX_COMPETITORS = 10
@@ -527,7 +527,7 @@ class BrandVisibilityDialog(QDialog):
     def _export_csv(self) -> None:
         if not self._current_report:
             return
-        path_str, _ = QFileDialog.getSaveFileName(self, "Exportar CSV", "visibilidad_marca.csv", "CSV (*.csv)")
+        path_str, _ = QFileDialog.getSaveFileName(self, "Exportar CSV", paths.default_export_path("visibilidad_marca.csv"), "CSV (*.csv)")
         if not path_str:
             return
         bv.export_csv(self._current_report, Path(path_str))
@@ -536,7 +536,7 @@ class BrandVisibilityDialog(QDialog):
     def _export_html(self) -> None:
         if not self._current_report:
             return
-        path_str, _ = QFileDialog.getSaveFileName(self, "Exportar reporte HTML", "visibilidad_marca.html", "HTML (*.html)")
+        path_str, _ = QFileDialog.getSaveFileName(self, "Exportar reporte HTML", paths.default_export_path("visibilidad_marca.html"), "HTML (*.html)")
         if not path_str:
             return
         bv.export_html_report(self._current_report, Path(path_str))

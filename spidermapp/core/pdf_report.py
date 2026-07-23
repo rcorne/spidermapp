@@ -49,11 +49,7 @@ def generate_pdf_report(result: CrawlResult, path: str | Path, priority_urls: se
     budget = stats.compute_crawl_budget(result.pages)
     breakdown = stats.category_breakdown(result.pages)
     opportunities = stats.find_opportunities(result.pages, limit=20)
-    error_pages = [
-        p for p in result.pages
-        if not any(i.code == "blocked_by_robots" for i in p.issues) and (p.status_code is None or p.status_code >= 400)
-    ]
-    error_pages.sort(key=lambda p: (p.status_code is None, p.status_code or 0))
+    error_pages = stats.error_pages(result.pages)
 
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.core_fonts_encoding = "cp1252"

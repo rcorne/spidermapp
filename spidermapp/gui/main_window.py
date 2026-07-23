@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 
 from spidermapp.core import app_settings, export, history, pdf_report, pptx_report, reports
 from spidermapp.core.models import CrawlConfig, CrawlResult, IssueCategory, PageResult
-from spidermapp.gui import theme
+from spidermapp.gui import paths, theme
 from spidermapp.gui.about_dialog import AboutDialog
 from spidermapp.gui.crawl_worker import CrawlWorker
 from spidermapp.gui.dashboard import DashboardTab
@@ -532,9 +532,9 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Spidermapp", "No hay resultados para exportar todavía.")
             return
 
-        default_name = f"spidermapp_crawl.{fmt}"
+        default_path = paths.default_export_path(f"spidermapp_crawl.{fmt}")
         filter_str = "CSV (*.csv)" if fmt == "csv" else "Excel (*.xlsx)"
-        path, _ = QFileDialog.getSaveFileName(self, "Exportar resultados", default_name, filter_str)
+        path, _ = QFileDialog.getSaveFileName(self, "Exportar resultados", default_path, filter_str)
         if not path:
             return
 
@@ -554,8 +554,8 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Spidermapp", "No hay resultados para exportar todavía.")
             return
 
-        default_name = pdf_report.default_pdf_filename(self._last_result.seed_url)
-        path, _ = QFileDialog.getSaveFileName(self, "Exportar reporte PDF", default_name, "PDF (*.pdf)")
+        default_path = paths.default_export_path(pdf_report.default_pdf_filename(self._last_result.seed_url))
+        path, _ = QFileDialog.getSaveFileName(self, "Exportar reporte PDF", default_path, "PDF (*.pdf)")
         if not path:
             return
 
@@ -572,8 +572,8 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Spidermapp", "No hay resultados para exportar todavía.")
             return
 
-        default_name = pptx_report.default_pptx_filename(self._last_result.seed_url)
-        path, _ = QFileDialog.getSaveFileName(self, "Exportar presentación PPTX", default_name, "PowerPoint (*.pptx)")
+        default_path = paths.default_export_path(pptx_report.default_pptx_filename(self._last_result.seed_url))
+        path, _ = QFileDialog.getSaveFileName(self, "Exportar presentación PPTX", default_path, "PowerPoint (*.pptx)")
         if not path:
             return
 
@@ -760,7 +760,7 @@ class MainWindow(QMainWindow):
         if self._last_result is None:
             QMessageBox.warning(self, "Spidermapp", "No hay resultados para generar informes todavía.")
             return
-        directory = QFileDialog.getExistingDirectory(self, "Carpeta para los informes por área")
+        directory = QFileDialog.getExistingDirectory(self, "Carpeta para los informes por área", str(paths.default_downloads_dir()))
         if not directory:
             return
         try:
