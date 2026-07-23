@@ -10,7 +10,7 @@ datas = [(os.path.join(PROJECT_ROOT, "spidermapp", "assets"), os.path.join("spid
 binaries = []
 hiddenimports = []
 
-for pkg in ("playwright",):
+for pkg in ("playwright", "pptx"):
     pkg_datas, pkg_binaries, pkg_hidden = collect_all(pkg)
     datas += pkg_datas
     binaries += pkg_binaries

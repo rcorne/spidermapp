@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from datetime import datetime
 
 from PySide6.QtCore import Qt
@@ -25,7 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from spidermapp.core import app_settings, export, history, pdf_report, reports
+from spidermapp.core import app_settings, export, history, pdf_report, pptx_report, reports
 from spidermapp.core.models import CrawlConfig, CrawlResult, IssueCategory, PageResult
 from spidermapp.gui import theme
 from spidermapp.gui.about_dialog import AboutDialog
@@ -77,6 +78,7 @@ class MainWindow(QMainWindow):
         self.proxy_model.setSourceModel(self.table_model)
 
         self._build_ui()
+        QApplication.instance().aboutToQuit.connect(self._cleanup_before_quit)
 
     def _build_ui(self) -> None:
         self._build_menus()
@@ -93,9 +95,6 @@ class MainWindow(QMainWindow):
         root_layout.addWidget(toolbar_container)
 
         root_layout.addWidget(self._build_progress_row())
-
-        self.news_ticker = NewsTicker()
-        root_layout.addWidget(self.news_ticker)
 
         self.tabs = QTabWidget()
         root_layout.addWidget(self.tabs, stretch=1)
@@ -117,8 +116,40 @@ class MainWindow(QMainWindow):
         self.llm_tab = LlmVisibilityTab()
         self.tabs.addTab(self.llm_tab, "Visibilidad en LLMs")
 
+        self.news_ticker = NewsTicker()
+        self.tabs.addTab(self.news_ticker, "Noticias SEO / IA")
+
         self.setStatusBar(QStatusBar())
         self.statusBar().showMessage("Listo.")
+
+    def _cleanup_before_quit(self) -> None:
+        """Qt fatally aborts the whole process if a QThread object gets
+        destroyed while its underlying OS thread is still running, so every
+        background worker must be asked to stop and actually finish before
+        Python's interpreter teardown reaches them. Connected to
+        QApplication.aboutToQuit rather than overriding closeEvent, because
+        Cmd+Q / "Salir" call QApplication.quit() directly — which does not
+        reliably route through the window's closeEvent."""
+        if self._worker is not None and self._worker.isRunning():
+            self._worker.stop()
+        self._stop_worker_for_quit(self._worker)
+        self._stop_worker_for_quit(getattr(self.news_ticker, "_worker", None))
+
+    @staticmethod
+    def _stop_worker_for_quit(worker, timeout_seconds: float = 5.0) -> None:
+        """Polls in short increments against a real wall-clock deadline
+        instead of trusting a single QThread.wait(ms) call — belt-and-braces
+        against any binding quirk where wait() doesn't honor its timeout.
+        Forcibly terminates as a last resort so quitting the app can never
+        hang indefinitely on a stuck background thread."""
+        if worker is None or not worker.isRunning():
+            return
+        deadline = time.monotonic() + timeout_seconds
+        while worker.isRunning() and time.monotonic() < deadline:
+            worker.wait(250)
+        if worker.isRunning():
+            worker.terminate()
+            worker.wait(1000)
 
     def _build_menus(self) -> None:
         menubar = self.menuBar()
@@ -165,6 +196,7 @@ class MainWindow(QMainWindow):
         action(exportar, "CSV…", lambda: self._export("csv"))
         action(exportar, "XLSX…", lambda: self._export("xlsx"))
         action(exportar, "Reporte PDF ejecutivo…", self._export_pdf)
+        action(exportar, "Presentación PPTX (resumen ejecutivo)…", self._export_pptx)
         action(exportar, "Informes por área de SEO…", self._export_area_reports)
 
         ayuda = menubar.addMenu("Ayuda")
@@ -522,7 +554,8 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Spidermapp", "No hay resultados para exportar todavía.")
             return
 
-        path, _ = QFileDialog.getSaveFileName(self, "Exportar reporte PDF", "spidermapp_reporte.pdf", "PDF (*.pdf)")
+        default_name = pdf_report.default_pdf_filename(self._last_result.seed_url)
+        path, _ = QFileDialog.getSaveFileName(self, "Exportar reporte PDF", default_name, "PDF (*.pdf)")
         if not path:
             return
 
@@ -533,6 +566,24 @@ class MainWindow(QMainWindow):
             return
 
         self.statusBar().showMessage(f"Reporte PDF exportado a {path}")
+
+    def _export_pptx(self) -> None:
+        if self._last_result is None:
+            QMessageBox.warning(self, "Spidermapp", "No hay resultados para exportar todavía.")
+            return
+
+        default_name = pptx_report.default_pptx_filename(self._last_result.seed_url)
+        path, _ = QFileDialog.getSaveFileName(self, "Exportar presentación PPTX", default_name, "PowerPoint (*.pptx)")
+        if not path:
+            return
+
+        try:
+            pptx_report.generate_pptx_report(self._last_result, path)
+        except Exception as exc:  # noqa: BLE001 - surfaced to the user via a dialog
+            QMessageBox.critical(self, "Spidermapp", f"No se pudo generar el PPTX: {exc}")
+            return
+
+        self.statusBar().showMessage(f"Presentación PPTX exportada a {path}")
 
     # ------------------------------------------------------------- menús
 

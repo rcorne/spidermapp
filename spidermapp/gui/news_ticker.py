@@ -86,10 +86,8 @@ class NewsCard(QFrame):
 
 
 class NewsTicker(QWidget):
-    """Sits between the progress row and the tabs: a panel of headlines
-    about SEO and LLMs pulled from Google News' public RSS feed, sized to
-    take up roughly a third of the window so there's something substantial
-    to read while a crawl (or nothing) is running. Rotates through more
+    """Its own tab ("Noticias SEO / IA"): a panel of headlines about SEO and
+    LLMs pulled from Google News' public RSS feed. Rotates through more
     stories than fit on screen at once."""
 
     def __init__(self, parent=None):
@@ -98,12 +96,12 @@ class NewsTicker(QWidget):
         self._offset = 0
         self._worker: NewsWorker | None = None
 
-        self.setStyleSheet(f"background: {theme.PRIMARY_SOFT}; border-bottom: 1px solid #E5E7EB;")
+        self.setStyleSheet(f"background: {theme.PRIMARY_SOFT};")
         self.setMinimumHeight(PANEL_MIN_HEIGHT)
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(14, 10, 14, 12)
-        outer.setSpacing(8)
+        outer.setContentsMargins(20, 16, 20, 16)
+        outer.setSpacing(10)
 
         tag = QLabel("NOTICIAS SEO / IA")
         tag.setStyleSheet(f"font-size: 11px; font-weight: 700; color: {theme.PRIMARY}; letter-spacing: 0.04em;")

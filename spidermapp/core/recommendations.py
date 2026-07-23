@@ -278,6 +278,13 @@ _RECOMMENDATIONS: dict[str, Recommendation] = {
         "Desaprovecha espacio para comunicar de qué trata la página y atraer clics.",
         ["Amplíalo a al menos 15 caracteres con una descripción más específica."],
     ),
+    "tls_browser_fallback": Recommendation(
+        "El sitio exige una versión de TLS muy reciente",
+        "El servidor solo acepta conexiones TLS modernas (p. ej. solo TLS 1.3). No es un problema del sitio: "
+        "Spidermapp lo rastreó a través de su navegador integrado. Ten en cuenta que herramientas o bots "
+        "antiguos podrían no poder conectarse.",
+        ["Ninguna acción necesaria; verifica que los bots que te importan (Googlebot, etc.) accedan sin problemas."],
+    ),
     "tls_expired": Recommendation(
         "El certificado HTTPS ya expiró",
         "Los navegadores muestran una advertencia de seguridad a los visitantes, y muchos abandonarán el sitio.",

@@ -29,6 +29,13 @@ StopFlag = Callable[[], bool]
 MAX_REDIRECT_HOPS = 10
 SITEMAP_INDEX_MAX_CHILDREN = 20
 
+_TLS_ERROR_MARKERS = ("ssl", "tls", "handshake")
+
+
+def _is_tls_error(error: str) -> bool:
+    lowered = error.lower()
+    return any(marker in lowered for marker in _TLS_ERROR_MARKERS)
+
 
 def _visible_text(html: str) -> str:
     soup = BeautifulSoup(html, "lxml")
@@ -74,6 +81,15 @@ class Crawler:
         self.pages: list[PageResult] = []
         self._browser = None
         self._playwright = None
+        self._fallback_context = None
+        self._browser_start_failed = False
+        self._tls_fallback_used = False
+        # Guards browser startup against the race where several concurrent
+        # _process_url tasks (one per URL in a batch, up to config.concurrency)
+        # all hit a TLS error against the same host at once and would
+        # otherwise each try to launch their own Playwright/Chromium
+        # instance simultaneously, corrupting self._browser/self._playwright.
+        self._browser_lock = asyncio.Lock()
         self._on_status: OnStatus | None = None
         self._exclude_regexes: list[re.Pattern] = []
         for pattern in config.exclude_patterns:
@@ -222,6 +238,18 @@ class Crawler:
             await self._status("Ejecutando checks a nivel de sitio…")
             await self._run_site_wide_checks(client, result)
 
+        if self._tls_fallback_used:
+            result.site_issues.append(
+                Issue(
+                    IssueCategory.SECURITY,
+                    IssueSeverity.INFO,
+                    "tls_browser_fallback",
+                    "El servidor exige una versión de TLS que el cliente HTTP directo no soporta "
+                    "(p. ej. sitios configurados solo-TLS 1.3); las páginas se descargaron a través "
+                    "del navegador Chromium integrado.",
+                )
+            )
+
         result.pages = self.pages
         result.finished_at = time.time()
         await self._status("Crawl terminado.")
@@ -359,11 +387,12 @@ class Crawler:
 
     async def _stop_browser(self) -> None:
         if self._browser is not None:
-            await self._browser.close()
+            await self._browser.close()  # also closes self._fallback_context, if any
         if self._playwright is not None:
             await self._playwright.stop()
         self._browser = None
         self._playwright = None
+        self._fallback_context = None
 
     async def _process_url(
         self,
@@ -392,21 +421,31 @@ class Crawler:
             page = PageResult(url=url, depth=depth, fetch_time_ms=fetch_time_ms, redirect_chain=chain)
 
             if response is None:
-                page.error = error
-                page.issues = issues_mod.collect_page_issues(page, self.priority_urls)
-                return page, []
-
-            page.status_code = response.status_code
-            page.final_url = str(response.url)
-            page.headers = dict(response.headers)
-            page.content_type = response.headers.get("content-type", "")
-            page.x_robots_tag = response.headers.get("x-robots-tag", "")
+                # Python's ssl module (LibreSSL on stock macOS) can't always
+                # negotiate what the server demands — e.g. Cloudflare sites
+                # configured as TLS-1.3-only reject it with
+                # "tlsv1 alert protocol version". Chromium has its own modern
+                # TLS stack, so those sites are fetched through the browser
+                # instead of dying at 1 page.
+                if _is_tls_error(error) and await self._fetch_via_browser(page):
+                    self._tls_fallback_used = True
+                else:
+                    page.error = error
+                    page.issues = issues_mod.collect_page_issues(page, self.priority_urls)
+                    return page, []
+            else:
+                page.status_code = response.status_code
+                page.final_url = str(response.url)
+                page.headers = dict(response.headers)
+                page.content_type = response.headers.get("content-type", "")
+                page.x_robots_tag = response.headers.get("x-robots-tag", "")
+                if "text/html" in page.content_type and response.status_code == 200:
+                    page.raw_html = response.text
 
             discovered: list[tuple[str, int]] = []
 
-            if "text/html" in page.content_type and response.status_code == 200:
-                html = response.text
-                page.raw_html = html
+            if "text/html" in page.content_type and page.status_code == 200 and page.raw_html:
+                html = page.raw_html
                 analysis = html_analysis.analyze_html(html, page.final_url)
                 page.title = analysis.title
                 page.meta_description = analysis.meta_description
@@ -432,7 +471,7 @@ class Crawler:
 
                 outlinks_for_discovery = list(analysis.outlinks)
 
-                if self._browser is not None:
+                if self._browser is not None and response is not None:
                     rendered_outlinks = await self._run_render_checks(page)
                     seen_targets = {link.target for link in outlinks_for_discovery}
                     for link in rendered_outlinks:
@@ -456,6 +495,70 @@ class Crawler:
 
             page.issues = issues_mod.collect_page_issues(page, self.priority_urls)
             return page, discovered
+
+    async def _ensure_browser(self) -> bool:
+        """Idempotent, concurrency-safe browser startup. Several
+        _process_url tasks can call this around the same time (one per URL
+        in a batch); the lock ensures only one of them actually launches
+        Chromium instead of racing to create multiple instances."""
+        if self._browser is not None:
+            return True
+        if self._browser_start_failed:
+            return False
+        async with self._browser_lock:
+            if self._browser is not None:
+                return True
+            if self._browser_start_failed:
+                return False
+            try:
+                await self._start_browser()
+            except Exception:  # noqa: BLE001 - playwright not installed / chromium missing
+                self._browser_start_failed = True
+                return False
+        return True
+
+    async def _get_fallback_context(self):
+        """One shared browser context reused across every TLS-fallback
+        fetch in this crawl, instead of a new context per URL — cheaper,
+        and avoids piling up many concurrent context creations against a
+        single Chromium instance under the default concurrency of 8."""
+        if self._fallback_context is None:
+            async with self._browser_lock:
+                if self._fallback_context is None:
+                    self._fallback_context = await self._browser.new_context()
+        return self._fallback_context
+
+    async def _fetch_via_browser(self, page: PageResult) -> bool:
+        """Fetch a URL with Chromium when httpx's TLS stack was rejected.
+        Fills the PageResult in place; the rendered DOM doubles as raw_html
+        (there is no separate raw fetch to compare against on these sites).
+        Returns False if the browser can't start or the navigation fails."""
+        if not await self._ensure_browser():
+            return False
+
+        pw_page = None
+        try:
+            context = await self._get_fallback_context()
+            pw_page = await context.new_page()
+            response = await pw_page.goto(
+                page.url, timeout=int(self.config.request_timeout * 1000), wait_until="domcontentloaded"
+            )
+            if response is None:
+                return False
+            await pw_page.wait_for_timeout(300)
+            page.status_code = response.status
+            page.final_url = pw_page.url
+            page.headers = {k.lower(): v for k, v in (await response.all_headers()).items()}
+            page.content_type = page.headers.get("content-type", "text/html")
+            page.x_robots_tag = page.headers.get("x-robots-tag", "")
+            if "text/html" in page.content_type and page.status_code == 200:
+                page.raw_html = await pw_page.content()
+            return True
+        except Exception:  # noqa: BLE001 - navigation errors leave the original TLS error in place
+            return False
+        finally:
+            if pw_page is not None:
+                await pw_page.close()
 
     async def _run_render_checks(self, page: PageResult) -> list[LinkEdge]:
         """Render the page with a real browser, compare it against the raw
@@ -551,7 +654,14 @@ class Crawler:
 
         loop = asyncio.get_running_loop()
         tls_info = await loop.run_in_executor(None, security.get_tls_info, url_utils.strip_www(host))
-        result.site_issues.extend(security.check_tls_validity(tls_info))
+        tls_issues = security.check_tls_validity(tls_info)
+        if self._tls_fallback_used:
+            # The local TLS stack couldn't even negotiate a session with this
+            # server, so "invalid/unreachable certificate" findings would be
+            # about our client, not the site — Chromium connected fine. Only
+            # the fallback INFO issue (added in run()) reports this honestly.
+            tls_issues = [i for i in tls_issues if i.code != "tls_invalid"]
+        result.site_issues.extend(tls_issues)
 
 
 async def crawl(

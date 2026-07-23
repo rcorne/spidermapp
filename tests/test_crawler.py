@@ -225,6 +225,13 @@ async def test_crawl_follows_nofollow_links_by_default(monkeypatch):
     assert "https://example.test/tracked" in urls
 
 
+def test_is_tls_error_matches_ssl_and_tls_failures():
+    assert crawler_mod._is_tls_error("[SSL: TLSV1_ALERT_PROTOCOL_VERSION] tlsv1 alert protocol version (_ssl.c:1129)")
+    assert crawler_mod._is_tls_error("handshake failure")
+    assert not crawler_mod._is_tls_error("Connection refused")
+    assert not crawler_mod._is_tls_error("timed out")
+
+
 async def test_crawl_flags_404_page():
     config = CrawlConfig(seed_url="https://example.test/", max_pages=50)
     result = await crawler_mod.crawl(config)
