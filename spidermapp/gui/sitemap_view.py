@@ -24,7 +24,7 @@ _SEVERITY_COLOR = {
     IssueSeverity.INFO: QColor(theme.INFO_HEX),
 }
 _GOOD_COLOR = theme.GOOD_COLOR
-_EDGE_COLOR = QColor(180, 184, 196, 140)
+_EDGE_COLOR = QColor(125, 133, 144, 140)
 
 
 @dataclass
@@ -141,13 +141,13 @@ class SiteMapCanvas(QWidget):
         center = QPointF(self.width() / 2, self.height() / 2)
 
         if not self._nodes:
-            painter.setPen(QColor("#9CA3AF"))
+            painter.setPen(QColor("#7D8590"))
             painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "Sin datos para mostrar todavía.")
             return
 
         # background web guides
         max_r = max((math.hypot(n.x, n.y) for n in self._nodes.values()), default=0)
-        guide_pen = QPen(QColor(230, 232, 238), 1)
+        guide_pen = QPen(QColor(45, 49, 59), 1)
         painter.setPen(guide_pen)
         ring = RING_GAP
         while ring <= max_r + RING_GAP:
@@ -173,22 +173,22 @@ class SiteMapCanvas(QWidget):
             pos = center + QPointF(node.x, node.y)
             color = _node_color(node.page)
             if node.orphan:
-                painter.setBrush(QColor(255, 255, 255))
+                painter.setBrush(QColor(theme.BG_ELEVATED))
                 pen = QPen(color, 1.6, Qt.PenStyle.DashLine)
                 painter.setPen(pen)
             else:
                 painter.setBrush(color)
-                painter.setPen(QPen(QColor("white"), 1.4))
+                painter.setPen(QPen(QColor("#1C1F26"), 1.4))
             painter.drawEllipse(pos, node.radius, node.radius)
 
         seed_node = next((n for n in self._nodes.values() if n.page.depth == 0 and not n.orphan), None)
         if seed_node is not None:
-            painter.setPen(QColor("#111827"))
+            painter.setPen(QColor("#E7E9EE"))
             label_pos = center + QPointF(seed_node.x, seed_node.y - seed_node.radius - 8)
             painter.drawText(QRectF(label_pos.x() - 60, label_pos.y() - 14, 120, 14), Qt.AlignmentFlag.AlignCenter, "Inicio")
 
         if self._truncated:
-            painter.setPen(QColor("#9CA3AF"))
+            painter.setPen(QColor("#7D8590"))
             painter.drawText(10, self.height() - 10, f"Mostrando los primeros {MAX_RENDERED_NODES} nodos.")
 
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802
@@ -219,8 +219,8 @@ class SiteMapTab(QWidget):
         legend.setTextFormat(Qt.TextFormat.RichText)
         legend.setWordWrap(True)
         legend.setStyleSheet(
-            f"padding: 8px 14px; font-size: 11.5px; color: #4B5563; background: #F9FAFB; "
-            f"border-bottom: 1px solid #E5E7EB;"
+            f"padding: 8px 14px; font-size: 11.5px; color: #C3C7D1; background: #20232B; "
+            f"border-bottom: 1px solid #2D313B;"
         )
         layout.addWidget(legend)
 

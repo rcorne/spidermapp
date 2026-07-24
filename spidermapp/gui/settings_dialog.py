@@ -25,7 +25,7 @@ from spidermapp.gui.crawl_settings_widgets import USER_AGENT_PRESETS, EditableUr
 
 def _section_header(text: str) -> QLabel:
     label = QLabel(text)
-    label.setStyleSheet("font-size: 12px; font-weight: 700; color: #374151; margin-top: 10px;")
+    label.setStyleSheet("font-size: 12px; font-weight: 700; color: #C3C7D1; margin-top: 10px;")
     return label
 
 
@@ -68,7 +68,7 @@ class SettingsDialog(QDialog):
 
         intro = QLabel("Valores por defecto para cada crawl nuevo. Siempre puedes ajustarlos en la barra superior antes de iniciar.")
         intro.setWordWrap(True)
-        intro.setStyleSheet("color: #4B5563; font-size: 12px; margin-bottom: 8px;")
+        intro.setStyleSheet("color: #C3C7D1; font-size: 12px; margin-bottom: 8px;")
         layout.addWidget(intro)
 
         form = QFormLayout()
@@ -271,7 +271,7 @@ class SettingsDialog(QDialog):
             "(~/.spidermapp/connectors.json)."
         )
         intro.setWordWrap(True)
-        intro.setStyleSheet("color: #4B5563; font-size: 12px;")
+        intro.setStyleSheet("color: #C3C7D1; font-size: 12px;")
         outer.addWidget(intro)
 
         scroll = QScrollArea()

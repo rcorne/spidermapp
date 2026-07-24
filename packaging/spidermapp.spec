@@ -35,7 +35,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="Spidermapp",
+    name="Pidgeot",
     debug=False,
     strip=False,
     upx=False,
@@ -49,20 +49,20 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=False,
-    name="Spidermapp",
+    name="Pidgeot",
 )
 
 app = BUNDLE(
     coll,
-    name="Spidermapp.app",
+    name="Pidgeot.app",
     icon=ICON_PATH,
-    bundle_identifier="com.spidermapp.seoaudit",
+    bundle_identifier="com.pidgeot.seoaudit",
     info_plist={
-        "CFBundleName": "Spidermapp",
-        "CFBundleDisplayName": "Spidermapp",
+        "CFBundleName": "Pidgeot",
+        "CFBundleDisplayName": "Pidgeot",
         "CFBundleShortVersionString": "0.1.0",
         "CFBundleVersion": "0.1.0",
         "NSHighResolutionCapable": True,
-        "NSHumanReadableCopyright": "Spidermapp",
+        "NSHumanReadableCopyright": "Pidgeot",
     },
 )

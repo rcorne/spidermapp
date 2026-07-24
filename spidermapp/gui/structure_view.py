@@ -25,7 +25,7 @@ class StructureTab(QWidget):
             "Doble clic en un nodo rastreado abre su detalle en la Tabla."
         )
         header.setWordWrap(True)
-        header.setStyleSheet("padding: 8px 14px; font-size: 11.5px; color: #4B5563; background: #F9FAFB; border-bottom: 1px solid #E5E7EB;")
+        header.setStyleSheet("padding: 8px 14px; font-size: 11.5px; color: #C3C7D1; background: #20232B; border-bottom: 1px solid #2D313B;")
         layout.addWidget(header)
 
         self.tree = QTreeWidget()
@@ -57,7 +57,7 @@ class StructureTab(QWidget):
                         item.setForeground(0, theme.GOOD_COLOR)
                     item.setData(0, Qt.ItemDataRole.UserRole, child.page.url)
                 else:
-                    item.setForeground(0, QColor("#9CA3AF"))
+                    item.setForeground(0, QColor("#7D8590"))
                     item.setToolTip(0, "Descubierta por enlaces, no rastreada")
                 add_node(item, child)
 

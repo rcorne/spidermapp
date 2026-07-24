@@ -52,7 +52,7 @@ class CrawlConfig:
     concurrency: int = 8
     respect_robots: bool = True
     render_js: bool = False
-    user_agent: str = "SpidermappBot/0.1 (+https://example.invalid/bot)"
+    user_agent: str = "PidgeotBot/0.1 (+https://example.invalid/bot)"
     request_timeout: float = 15.0
     priority_urls: list[str] = field(default_factory=list)
     include_subdomains: bool = False
@@ -62,6 +62,7 @@ class CrawlConfig:
     follow_nofollow: bool = True
     max_query_params: int = 0  # 0 = sin límite
     max_links_per_page: int = 0  # 0 = sin límite
+    max_retries: int = 2
 
 
 @dataclass

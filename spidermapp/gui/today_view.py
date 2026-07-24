@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 from spidermapp.core import priorities, tasks
 from spidermapp.gui import theme
 
-_SEVERITY_COLOR = {"critical": theme.CRITICAL_HEX, "warning": theme.WARNING_HEX, "info": "#9CA3AF"}
+_SEVERITY_COLOR = {"critical": theme.CRITICAL_HEX, "warning": theme.WARNING_HEX, "info": "#7D8590"}
 _SEVERITY_IMPACT_LABEL = {"critical": "Impacto alto", "warning": "Impacto medio", "info": "Impacto bajo"}
 
 
@@ -25,9 +25,9 @@ class PriorityRow(QFrame):
     def __init__(self, priority: "priorities.Priority", parent=None):
         super().__init__(parent)
         self._priority = priority
-        color = _SEVERITY_COLOR.get(priority.severity, "#9CA3AF")
+        color = _SEVERITY_COLOR.get(priority.severity, "#7D8590")
         self.setStyleSheet(
-            f"PriorityRow {{ background: white; border: 1px solid #E5E7EB; border-left: 4px solid {color}; "
+            f"PriorityRow {{ background: #1C1F26; border: 1px solid #2D313B; border-left: 4px solid {color}; "
             f"border-radius: 6px; }}"
         )
         layout = QHBoxLayout(self)
@@ -35,7 +35,7 @@ class PriorityRow(QFrame):
         layout.setSpacing(10)
 
         site_label = QLabel(priority.site)
-        site_label.setStyleSheet("font-size: 10.5px; font-weight: 700; color: #6B7280;")
+        site_label.setStyleSheet("font-size: 10.5px; font-weight: 700; color: #9AA1AE;")
         site_label.setFixedWidth(150)
         layout.addWidget(site_label)
 
@@ -44,13 +44,13 @@ class PriorityRow(QFrame):
         title = QLabel(priority.title)
         title.setTextFormat(Qt.TextFormat.PlainText)
         title.setWordWrap(True)
-        title.setStyleSheet("font-size: 13px; font-weight: 700; color: #111827;")
+        title.setStyleSheet("font-size: 13px; font-weight: 700; color: #E7E9EE;")
         text_box.addWidget(title)
         if priority.fix_step:
             sub = QLabel(priority.fix_step)
             sub.setTextFormat(Qt.TextFormat.PlainText)
             sub.setWordWrap(True)
-            sub.setStyleSheet("font-size: 11px; color: #6B7280;")
+            sub.setStyleSheet("font-size: 11px; color: #9AA1AE;")
             text_box.addWidget(sub)
         layout.addLayout(text_box, stretch=1)
 
@@ -60,7 +60,7 @@ class PriorityRow(QFrame):
 
         pages_word = "página" if priority.affected_pages == 1 else "páginas"
         pages_label = QLabel(f"{priority.affected_pages} {pages_word}")
-        pages_label.setStyleSheet("font-size: 11px; color: #9CA3AF;")
+        pages_label.setStyleSheet("font-size: 11px; color: #7D8590;")
         pages_label.setFixedWidth(70)
         layout.addWidget(pages_label)
 
@@ -83,14 +83,14 @@ class TodayView(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
 
         header = QWidget()
-        header.setStyleSheet("background: white; border-bottom: 1px solid #E5E7EB;")
+        header.setStyleSheet("background: #1C1F26; border-bottom: 1px solid #2D313B;")
         header_layout = QVBoxLayout(header)
         header_layout.setContentsMargins(20, 16, 20, 14)
         title = QLabel("Hoy")
-        title.setStyleSheet("font-size: 20px; font-weight: 700; color: #111827;")
+        title.setStyleSheet("font-size: 20px; font-weight: 700; color: #E7E9EE;")
         header_layout.addWidget(title)
         self.subtitle = QLabel("Lo más urgente en todos los sitios auditados, en un solo lugar.")
-        self.subtitle.setStyleSheet("font-size: 12px; color: #6B7280;")
+        self.subtitle.setStyleSheet("font-size: 12px; color: #9AA1AE;")
         header_layout.addWidget(self.subtitle)
         outer.addWidget(header)
 
@@ -117,7 +117,7 @@ class TodayView(QWidget):
         if not priority_list:
             self.subtitle.setText("Todavía no hay auditorías guardadas. Corre un crawl para empezar a ver prioridades aquí.")
             empty = QLabel("Sin prioridades por ahora.")
-            empty.setStyleSheet("color: #9CA3AF; font-size: 12.5px; font-style: italic;")
+            empty.setStyleSheet("color: #7D8590; font-size: 12.5px; font-style: italic;")
             self.rows_layout.addWidget(empty)
             return
 

@@ -101,7 +101,7 @@ class LlmVisibilityTab(QWidget):
 
     def _build_readiness_section(self, layout: QVBoxLayout) -> None:
         header = QLabel("Preparación para IA")
-        header.setStyleSheet("font-size: 14px; font-weight: 700; color: #111827;")
+        header.setStyleSheet("font-size: 14px; font-weight: 700; color: #E7E9EE;")
         layout.addWidget(header)
 
         sub = QLabel(
@@ -109,11 +109,11 @@ class LlmVisibilityTab(QWidget):
             "(robots.txt, llms.txt, datos estructurados, Wikipedia). No requiere ninguna clave API."
         )
         sub.setWordWrap(True)
-        sub.setStyleSheet("font-size: 11.5px; color: #6B7280;")
+        sub.setStyleSheet("font-size: 11.5px; color: #9AA1AE;")
         layout.addWidget(sub)
 
         self.readiness_status = QLabel("Corre un crawl para ver este análisis.")
-        self.readiness_status.setStyleSheet("font-size: 12px; color: #6B7280; margin-top: 4px;")
+        self.readiness_status.setStyleSheet("font-size: 12px; color: #9AA1AE; margin-top: 4px;")
         layout.addWidget(self.readiness_status)
 
         self.readiness_container = QWidget()
@@ -124,7 +124,7 @@ class LlmVisibilityTab(QWidget):
 
         rule = QFrame()
         rule.setFrameShape(QFrame.Shape.HLine)
-        rule.setStyleSheet("color: #E5E7EB; margin: 10px 0;")
+        rule.setStyleSheet("color: #2D313B; margin: 10px 0;")
         layout.addWidget(rule)
 
     def _clear(self, layout) -> None:
@@ -184,12 +184,12 @@ class LlmVisibilityTab(QWidget):
 
         # bots
         bots_header = QLabel("Acceso de bots de IA (robots.txt)")
-        bots_header.setStyleSheet("font-size: 12px; font-weight: 700; color: #374151; margin-top: 4px;")
+        bots_header.setStyleSheet("font-size: 12px; font-weight: 700; color: #C3C7D1; margin-top: 4px;")
         self.readiness_layout.addWidget(bots_header)
 
         if not report.robots_found:
             note = QLabel("No se encontró robots.txt — se asume que todos los bots están permitidos.")
-            note.setStyleSheet("font-size: 11.5px; color: #9CA3AF;")
+            note.setStyleSheet("font-size: 11.5px; color: #7D8590;")
             self.readiness_layout.addWidget(note)
 
         bots_grid = QGridLayout()
@@ -197,10 +197,10 @@ class LlmVisibilityTab(QWidget):
         bots_grid.setVerticalSpacing(4)
         for row, bot in enumerate(report.bot_access):
             name = QLabel(bot.bot)
-            name.setStyleSheet("font-size: 11.5px; font-weight: 600; color: #111827;")
+            name.setStyleSheet("font-size: 11.5px; font-weight: 600; color: #E7E9EE;")
             name.setFixedWidth(120)
             desc = QLabel(bot.description)
-            desc.setStyleSheet("font-size: 11.5px; color: #6B7280;")
+            desc.setStyleSheet("font-size: 11.5px; color: #9AA1AE;")
             pill = _fact_pill(bot.allowed, "Permitido", "Bloqueado")
             bots_grid.addWidget(name, row, 0)
             bots_grid.addWidget(desc, row, 1)
@@ -211,7 +211,7 @@ class LlmVisibilityTab(QWidget):
 
         # other signals
         signals_header = QLabel("Otras señales públicas")
-        signals_header.setStyleSheet("font-size: 12px; font-weight: 700; color: #374151; margin-top: 8px;")
+        signals_header.setStyleSheet("font-size: 12px; font-weight: 700; color: #C3C7D1; margin-top: 8px;")
         self.readiness_layout.addWidget(signals_header)
 
         signals_row = QHBoxLayout()
@@ -231,7 +231,7 @@ class LlmVisibilityTab(QWidget):
         if report.structured_data_types:
             types_label = QLabel("Tipos de datos estructurados detectados: " + ", ".join(report.structured_data_types))
             types_label.setWordWrap(True)
-            types_label.setStyleSheet("font-size: 11px; color: #9CA3AF;")
+            types_label.setStyleSheet("font-size: 11px; color: #7D8590;")
             self.readiness_layout.addWidget(types_label)
 
         wiki_row = QHBoxLayout()
@@ -243,7 +243,7 @@ class LlmVisibilityTab(QWidget):
             wiki_label.setStyleSheet(f"font-size: 11.5px; color: {theme.GOOD_HEX};")
         else:
             wiki_label = QLabel("✕ No se encontró un artículo de Wikipedia para esta marca.")
-            wiki_label.setStyleSheet("font-size: 11.5px; color: #9CA3AF;")
+            wiki_label.setStyleSheet("font-size: 11.5px; color: #7D8590;")
         wiki_row.addWidget(wiki_label)
         wiki_row.addStretch(1)
         wiki_container = QWidget()
@@ -254,7 +254,7 @@ class LlmVisibilityTab(QWidget):
 
     def _build_llm_query_section(self, layout: QVBoxLayout) -> None:
         header = QLabel("Consulta directa a LLMs (opcional)")
-        header.setStyleSheet("font-size: 14px; font-weight: 700; color: #111827;")
+        header.setStyleSheet("font-size: 14px; font-weight: 700; color: #E7E9EE;")
         layout.addWidget(header)
 
         header_row = QHBoxLayout()
@@ -263,7 +263,7 @@ class LlmVisibilityTab(QWidget):
             "en la respuesta. Requiere claves API (Archivo → Configuración → Conectores)."
         )
         self.status_label.setWordWrap(True)
-        self.status_label.setStyleSheet("color: #6B7280; font-size: 11.5px;")
+        self.status_label.setStyleSheet("color: #9AA1AE; font-size: 11.5px;")
         header_row.addWidget(self.status_label, stretch=1)
 
         self.run_button = QPushButton("Ejecutar análisis")
@@ -313,7 +313,7 @@ class LlmVisibilityTab(QWidget):
             )
         if report.providers_unconfigured:
             missing = ", ".join(llm_visibility.PROVIDER_LABELS[p] for p in report.providers_unconfigured)
-            parts.append(f'<span style="color:#9CA3AF;">Sin configurar: {missing}</span>')
+            parts.append(f'<span style="color:#7D8590;">Sin configurar: {missing}</span>')
         self.summary_label.setText(" &nbsp;·&nbsp; ".join(parts) if parts else "Sin resultados.")
 
         self.table.setRowCount(len(report.results))
@@ -331,11 +331,11 @@ class LlmVisibilityTab(QWidget):
     def _build_brand_visibility_section(self, layout: QVBoxLayout) -> None:
         rule = QFrame()
         rule.setFrameShape(QFrame.Shape.HLine)
-        rule.setStyleSheet("color: #E5E7EB; margin: 10px 0;")
+        rule.setStyleSheet("color: #2D313B; margin: 10px 0;")
         layout.addWidget(rule)
 
         header = QLabel("Analizador de visibilidad de marca en LLMs")
-        header.setStyleSheet("font-size: 14px; font-weight: 700; color: #111827;")
+        header.setStyleSheet("font-size: 14px; font-weight: 700; color: #E7E9EE;")
         layout.addWidget(header)
 
         row = QHBoxLayout()
@@ -345,7 +345,7 @@ class LlmVisibilityTab(QWidget):
             "corridas. Requiere claves API configuradas."
         )
         sub.setWordWrap(True)
-        sub.setStyleSheet("font-size: 11.5px; color: #6B7280;")
+        sub.setStyleSheet("font-size: 11.5px; color: #9AA1AE;")
         row.addWidget(sub, stretch=1)
 
         open_button = QPushButton("Abrir analizador de marca…")

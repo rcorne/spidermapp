@@ -53,7 +53,7 @@ MAX_CRAWL_PAGES = 10000
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Spidermapp — Auditor de SEO")
+        self.setWindowTitle("Pidgeot — Auditor de SEO")
 
         # Behave like any normal window: shrinkable, and never open wider
         # than the screen the app lands on.
@@ -94,7 +94,7 @@ class MainWindow(QMainWindow):
         root_layout.setSpacing(0)
 
         toolbar_container = QWidget()
-        toolbar_container.setStyleSheet("background: white; border-bottom: 1px solid #E5E7EB;")
+        toolbar_container.setStyleSheet("background: #1C1F26; border-bottom: 1px solid #2D313B;")
         toolbar_container.setLayout(self._build_toolbar())
         root_layout.addWidget(toolbar_container)
 
@@ -255,7 +255,7 @@ class MainWindow(QMainWindow):
 
     def _build_progress_row(self) -> QWidget:
         container = QWidget()
-        container.setStyleSheet("background: #F9FAFB; border-bottom: 1px solid #E5E7EB;")
+        container.setStyleSheet("background: #20232B; border-bottom: 1px solid #2D313B;")
         row = QHBoxLayout(container)
         row.setContentsMargins(12, 4, 12, 4)
         row.setSpacing(10)
@@ -267,13 +267,13 @@ class MainWindow(QMainWindow):
         self.progress_bar.setFormat("%v de %m páginas")
         self.progress_bar.setFixedHeight(14)
         self.progress_bar.setStyleSheet(
-            f"QProgressBar {{ border: 1px solid #E5E7EB; border-radius: 7px; background: #EEF0F2; font-size: 10px; }}"
+            f"QProgressBar {{ border: 1px solid #2D313B; border-radius: 7px; background: #20232B; font-size: 10px; }}"
             f"QProgressBar::chunk {{ background-color: {theme.PRIMARY}; border-radius: 7px; }}"
         )
         row.addWidget(self.progress_bar, stretch=1)
 
         self.phase_label = QLabel("Listo.")
-        self.phase_label.setStyleSheet("color: #6B7280; font-size: 11px;")
+        self.phase_label.setStyleSheet("color: #9AA1AE; font-size: 11px;")
         # Never let a long URL in the label dictate the window's minimum width
         self.phase_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.phase_label.setMinimumWidth(120)

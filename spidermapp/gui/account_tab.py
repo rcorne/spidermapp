@@ -101,7 +101,7 @@ class AccountTab(QWidget):
         session = auth.load_session()
         if not session:
             label = QLabel("No has iniciado sesión.")
-            label.setStyleSheet("font-size: 12.5px; color: #6B7280;")
+            label.setStyleSheet("font-size: 12.5px; color: #9AA1AE;")
             self.session_layout.addWidget(label)
             return
 
@@ -115,7 +115,7 @@ class AccountTab(QWidget):
             f"conectado el {datetime.fromtimestamp(session.get('connected_at', 0)).strftime('%d/%m/%Y %H:%M')}"
         )
         info.setTextFormat(Qt.TextFormat.RichText)
-        info.setStyleSheet("font-size: 12.5px; color: #111827;")
+        info.setStyleSheet("font-size: 12.5px; color: #E7E9EE;")
         row.addWidget(info, stretch=1)
 
         disconnect = QPushButton("Desconectar")
@@ -134,14 +134,14 @@ class AccountTab(QWidget):
     def _build_provider_section(self, provider_key: str) -> QWidget:
         provider = auth.PROVIDERS[provider_key]
         box = QFrame()
-        box.setStyleSheet("QFrame { border: 1px solid #E5E7EB; border-radius: 8px; }")
+        box.setStyleSheet("QFrame { border: 1px solid #2D313B; border-radius: 8px; }")
         layout = QVBoxLayout(box)
         layout.setContentsMargins(14, 12, 14, 12)
         layout.setSpacing(6)
 
         header_row = QHBoxLayout()
         title = QLabel(provider.label)
-        title.setStyleSheet("font-size: 13px; font-weight: 700; color: #111827;")
+        title.setStyleSheet("font-size: 13px; font-weight: 700; color: #E7E9EE;")
         header_row.addWidget(title)
         header_row.addStretch(1)
 

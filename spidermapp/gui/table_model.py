@@ -33,9 +33,9 @@ _SEVERITY_TEXT_COLOR = {
     IssueSeverity.INFO: QColor(theme.INFO_HEX),
 }
 _SEVERITY_ROW_TINT = {
-    IssueSeverity.CRITICAL: QColor(254, 242, 242),
-    IssueSeverity.WARNING: QColor(255, 251, 235),
-    IssueSeverity.INFO: QColor(239, 246, 255),
+    IssueSeverity.CRITICAL: QColor(58, 34, 38),
+    IssueSeverity.WARNING: QColor(58, 51, 28),
+    IssueSeverity.INFO: QColor(30, 47, 69),
 }
 _GOOD_TEXT_COLOR = QColor(theme.GOOD_HEX)
 _CRITICAL_TEXT_COLOR = QColor(theme.CRITICAL_HEX)

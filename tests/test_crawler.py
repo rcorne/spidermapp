@@ -1,3 +1,5 @@
+import asyncio
+
 import httpx
 import pytest
 
@@ -238,6 +240,78 @@ async def test_crawl_flags_404_page():
     missing = next(p for p in result.pages if p.url == "https://example.test/missing")
     assert missing.status_code == 404
     assert any(i.code == "error_404" for i in missing.issues)
+
+
+async def test_crawl_retries_after_transient_503_then_succeeds(monkeypatch):
+    monkeypatch.setattr(crawler_mod.asyncio, "sleep", lambda *_a, **_k: asyncio.sleep(0))
+    attempts = {"home": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = request.url
+        if url.scheme == "http" and url.host == "example.test" and url.path == "/":
+            return httpx.Response(301, headers={"Location": "https://example.test/__https_check__"})
+        if url.host != "example.test":
+            return httpx.Response(404)
+        if url.path == "/__https_check__":
+            return httpx.Response(200)
+        if url.path in ("/robots.txt", "/sitemap.xml"):
+            return httpx.Response(404)
+        if url.path == "/":
+            attempts["home"] += 1
+            if attempts["home"] == 1:
+                return httpx.Response(503, headers={"Retry-After": "0"})
+            return httpx.Response(200, content=PAGE_HOME, headers={"content-type": "text/html"})
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+
+    def patched_client(*args, **kwargs):
+        kwargs["transport"] = transport
+        return _REAL_ASYNC_CLIENT(*args, **kwargs)
+
+    monkeypatch.setattr(crawler_mod.httpx, "AsyncClient", patched_client)
+
+    config = CrawlConfig(seed_url="https://example.test/", max_pages=5, max_retries=2)
+    result = await crawler_mod.crawl(config)
+
+    home = next(p for p in result.pages if p.url == "https://example.test/")
+    assert home.status_code == 200
+    assert attempts["home"] == 2
+
+
+async def test_crawl_gives_up_after_exhausting_retries_on_persistent_503(monkeypatch):
+    monkeypatch.setattr(crawler_mod.asyncio, "sleep", lambda *_a, **_k: asyncio.sleep(0))
+    attempts = {"home": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = request.url
+        if url.scheme == "http" and url.host == "example.test" and url.path == "/":
+            return httpx.Response(301, headers={"Location": "https://example.test/__https_check__"})
+        if url.host != "example.test":
+            return httpx.Response(404)
+        if url.path == "/__https_check__":
+            return httpx.Response(200)
+        if url.path in ("/robots.txt", "/sitemap.xml"):
+            return httpx.Response(404)
+        if url.path == "/":
+            attempts["home"] += 1
+            return httpx.Response(503, headers={"Retry-After": "0"})
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+
+    def patched_client(*args, **kwargs):
+        kwargs["transport"] = transport
+        return _REAL_ASYNC_CLIENT(*args, **kwargs)
+
+    monkeypatch.setattr(crawler_mod.httpx, "AsyncClient", patched_client)
+
+    config = CrawlConfig(seed_url="https://example.test/", max_pages=5, max_retries=2)
+    result = await crawler_mod.crawl(config)
+
+    home = next(p for p in result.pages if p.url == "https://example.test/")
+    assert home.status_code == 503
+    assert attempts["home"] == 3  # first attempt + 2 retries
 
 
 async def test_crawl_respects_max_pages():

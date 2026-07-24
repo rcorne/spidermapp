@@ -17,7 +17,7 @@ from spidermapp.core import recommendations, stats
 from spidermapp.core.models import Issue, IssueSeverity, PageResult
 from spidermapp.gui import theme
 
-RING_TRACK_COLOR = QColor("#E5E7EB")
+RING_TRACK_COLOR = QColor("#2D313B")
 
 _SEVERITY_HEX = {
     IssueSeverity.CRITICAL: theme.CRITICAL_HEX,
@@ -69,7 +69,7 @@ class HealthScoreRing(QWidget):
             span = int(360 * 16 * (self._score / 100))
             painter.drawArc(rect, 90 * 16, -span)
 
-        painter.setPen(QColor("#111827") if not self._pending else QColor("#9CA3AF"))
+        painter.setPen(QColor("#E7E9EE") if not self._pending else QColor("#7D8590"))
         font = QFont(self.font())
         font.setPointSize(22 if not self._pending else 15)
         font.setBold(True)
@@ -96,7 +96,7 @@ class StackedBar(QWidget):
         w, h = self.width(), self.height()
 
         painter.setPen(Qt.PenStyle.NoPen)
-        painter.setBrush(QColor("#EEF0F2"))
+        painter.setBrush(QColor("#20232B"))
         painter.drawRoundedRect(0, 0, w, h, h / 2, h / 2)
 
         total = sum(v for v, _ in self._segments)
@@ -114,7 +114,7 @@ class StackedBar(QWidget):
         painter.setBrush(Qt.BrushStyle.NoBrush)
 
 
-def _stat_box(value_text: str, label_text: str, definition_text: str = "", pending_text: str = "", color: str = "#111827") -> QWidget:
+def _stat_box(value_text: str, label_text: str, definition_text: str = "", pending_text: str = "", color: str = "#E7E9EE") -> QWidget:
     box = QFrame()
     box.setFrameShape(QFrame.Shape.NoFrame)
     layout = QVBoxLayout(box)
@@ -124,14 +124,14 @@ def _stat_box(value_text: str, label_text: str, definition_text: str = "", pendi
     value = QLabel(value_text)
     value.setStyleSheet(f"font-size: 30px; font-weight: 700; color: {color};")
     label = QLabel(label_text)
-    label.setStyleSheet("font-size: 13px; font-weight: 600; color: #374151;")
+    label.setStyleSheet("font-size: 13px; font-weight: 600; color: #C3C7D1;")
 
     layout.addWidget(value)
     layout.addWidget(label)
 
     definition = QLabel(definition_text)
     definition.setWordWrap(True)
-    definition.setStyleSheet("font-size: 10.5px; color: #9CA3AF;")
+    definition.setStyleSheet("font-size: 10.5px; color: #7D8590;")
     definition.setVisible(bool(definition_text))
     layout.addWidget(definition)
 
@@ -154,7 +154,7 @@ def _set_stat_pending(box: QWidget, pending: bool) -> None:
 def _fact_pill(ok: bool, ok_text: str, bad_text: str) -> QLabel:
     text = f"✓ {ok_text}" if ok else f"✕ {bad_text}"
     color = theme.GOOD_HEX if ok else theme.CRITICAL_HEX
-    bg = "#ECFDF5" if ok else "#FEF2F2"
+    bg = "#1F3A2E" if ok else "#3A2226"
     pill = QLabel(text)
     pill.setStyleSheet(
         f"color: {color}; background: {bg}; font-size: 11.5px; font-weight: 600; "
@@ -175,7 +175,7 @@ class OpportunityRow(QFrame):
         )
 
         self.setStyleSheet(
-            f"OpportunityRow {{ background: white; border: 1px solid #E5E7EB; border-left: 4px solid {color}; "
+            f"OpportunityRow {{ background: #1C1F26; border: 1px solid #2D313B; border-left: 4px solid {color}; "
             f"border-radius: 4px; }}"
         )
         layout = QVBoxLayout(self)
@@ -187,7 +187,7 @@ class OpportunityRow(QFrame):
         action = QLabel(action_text)
         action.setTextFormat(Qt.TextFormat.PlainText)  # recommendation text may contain literal "<title>" etc.
         action.setWordWrap(True)
-        action.setStyleSheet("font-size: 13px; font-weight: 700; color: #111827;")
+        action.setStyleSheet("font-size: 13px; font-weight: 700; color: #E7E9EE;")
         header.addWidget(action, stretch=1)
 
         pages_word = "página" if opportunity.affected_pages == 1 else "páginas"
@@ -204,7 +204,7 @@ class OpportunityRow(QFrame):
             why = QLabel(rec.why)
             why.setTextFormat(Qt.TextFormat.PlainText)
             why.setWordWrap(True)
-            why.setStyleSheet("font-size: 11.5px; color: #6B7280;")
+            why.setStyleSheet("font-size: 11.5px; color: #9AA1AE;")
             layout.addWidget(why)
 
 
@@ -241,7 +241,7 @@ class DashboardTab(QWidget):
         self.ring = HealthScoreRing()
         score_box.addWidget(self.ring, alignment=Qt.AlignmentFlag.AlignHCenter)
         score_caption = QLabel("Salud del sitio")
-        score_caption.setStyleSheet("font-size: 12px; color: #6B7280;")
+        score_caption.setStyleSheet("font-size: 12px; color: #9AA1AE;")
         score_caption.setAlignment(Qt.AlignmentFlag.AlignHCenter)
         score_box.addWidget(score_caption)
         top_row.addLayout(score_box)
@@ -285,7 +285,7 @@ class DashboardTab(QWidget):
         root.addLayout(top_row)
 
         cat_header = QLabel("Issues por categoría")
-        cat_header.setStyleSheet("font-size: 13px; font-weight: 700; color: #111827; margin-top: 8px;")
+        cat_header.setStyleSheet("font-size: 13px; font-weight: 700; color: #E7E9EE; margin-top: 8px;")
         root.addWidget(cat_header)
 
         self.category_grid = QGridLayout()
@@ -294,13 +294,13 @@ class DashboardTab(QWidget):
         root.addLayout(self.category_grid)
 
         opportunities_header = QLabel("Oportunidades de optimización")
-        opportunities_header.setStyleSheet("font-size: 13px; font-weight: 700; color: #111827; margin-top: 12px;")
+        opportunities_header.setStyleSheet("font-size: 13px; font-weight: 700; color: #E7E9EE; margin-top: 12px;")
         root.addWidget(opportunities_header)
 
         opportunities_sub = QLabel(
             "Las mejoras con mayor impacto potencial para tu sitio, agrupadas por tipo de solución."
         )
-        opportunities_sub.setStyleSheet("font-size: 11.5px; color: #6B7280; margin-bottom: 4px;")
+        opportunities_sub.setStyleSheet("font-size: 11.5px; color: #9AA1AE; margin-bottom: 4px;")
         root.addWidget(opportunities_sub)
 
         self.opportunities_container = QWidget()
@@ -310,7 +310,7 @@ class DashboardTab(QWidget):
         root.addWidget(self.opportunities_container)
 
         infra_header = QLabel("Robots.txt y Sitemap")
-        infra_header.setStyleSheet("font-size: 13px; font-weight: 700; color: #111827; margin-top: 16px;")
+        infra_header.setStyleSheet("font-size: 13px; font-weight: 700; color: #E7E9EE; margin-top: 16px;")
         root.addWidget(infra_header)
 
         self.infra_container = QWidget()
@@ -354,12 +354,12 @@ class DashboardTab(QWidget):
 
         self._clear_layout(self.category_grid)
         empty_cat = QLabel("Inicia el crawl para ver los issues por categoría.")
-        empty_cat.setStyleSheet("color: #9CA3AF; font-size: 12px; font-style: italic;")
+        empty_cat.setStyleSheet("color: #7D8590; font-size: 12px; font-style: italic;")
         self.category_grid.addWidget(empty_cat, 0, 0)
 
         self._clear_layout(self.opportunities_layout)
         empty_opp = QLabel("Inicia el crawl para ver oportunidades de optimización.")
-        empty_opp.setStyleSheet("color: #9CA3AF; font-size: 12px; font-style: italic;")
+        empty_opp.setStyleSheet("color: #7D8590; font-size: 12px; font-style: italic;")
         self.opportunities_layout.addWidget(empty_opp)
 
     def update_site_info(self, sitemap_urls: list[str], site_issues: list[Issue]) -> None:
@@ -382,7 +382,7 @@ class DashboardTab(QWidget):
 
         if not breakdown:
             empty = QLabel("Sin issues detectados en este crawl.")
-            empty.setStyleSheet("color: #6B7280; font-size: 12px;")
+            empty.setStyleSheet("color: #9AA1AE; font-size: 12px;")
             self.category_grid.addWidget(empty, 0, 0)
             return
 
@@ -391,7 +391,7 @@ class DashboardTab(QWidget):
 
         for row, bucket in enumerate(breakdown):
             name = QLabel(CATEGORY_LABELS.get(bucket.category, bucket.category.value))
-            name.setStyleSheet("font-size: 12px; color: #374151;")
+            name.setStyleSheet("font-size: 12px; color: #C3C7D1;")
             name.setFixedWidth(190)
 
             bar = StackedBar()
@@ -405,7 +405,7 @@ class DashboardTab(QWidget):
             )
 
             count = QLabel(str(bucket.total))
-            count.setStyleSheet("font-size: 12px; color: #6B7280;")
+            count.setStyleSheet("font-size: 12px; color: #9AA1AE;")
             count.setFixedWidth(28)
             count.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
@@ -432,7 +432,7 @@ class DashboardTab(QWidget):
     def _show_infra_pending(self) -> None:
         self._clear_layout(self.infra_layout)
         pending = QLabel("Se completa al terminar el crawl.")
-        pending.setStyleSheet("color: #9CA3AF; font-size: 12px; font-style: italic;")
+        pending.setStyleSheet("color: #7D8590; font-size: 12px; font-style: italic;")
         self.infra_layout.addWidget(pending)
 
     def _render_infra(self, infra: stats.SiteInfrastructure) -> None:
@@ -460,7 +460,7 @@ class DashboardTab(QWidget):
 
         if infra.other_findings:
             other_header = QLabel("Otros hallazgos técnicos a nivel de sitio")
-            other_header.setStyleSheet("font-size: 11.5px; font-weight: 700; color: #374151; margin-top: 6px;")
+            other_header.setStyleSheet("font-size: 11.5px; font-weight: 700; color: #C3C7D1; margin-top: 6px;")
             self.infra_layout.addWidget(other_header)
             for issue in infra.other_findings:
                 rec = recommendations.get_recommendation(issue)

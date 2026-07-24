@@ -30,7 +30,7 @@ USER_AGENT_PRESETS = {
 def hint(text: str) -> QLabel:
     label = QLabel(text)
     label.setWordWrap(True)
-    label.setStyleSheet("font-size: 11px; color: #6B7280; margin-bottom: 4px;")
+    label.setStyleSheet("font-size: 11px; color: #9AA1AE; margin-bottom: 4px;")
     return label
 
 

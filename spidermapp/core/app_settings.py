@@ -6,7 +6,7 @@ from pathlib import Path
 
 SETTINGS_PATH = Path.home() / ".spidermapp" / "settings.json"
 
-DEFAULT_USER_AGENT = "SpidermappBot/0.1 (+https://example.invalid/bot)"
+DEFAULT_USER_AGENT = "PidgeotBot/0.1 (+https://example.invalid/bot)"
 
 
 @dataclass

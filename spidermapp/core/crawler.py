@@ -31,10 +31,26 @@ SITEMAP_INDEX_MAX_CHILDREN = 20
 
 _TLS_ERROR_MARKERS = ("ssl", "tls", "handshake")
 
+# Status codes a site (or its CDN/WAF) uses to say "slow down", not "this
+# page doesn't exist" — worth a courteous retry instead of giving up on the
+# URL immediately.
+_THROTTLE_STATUS = {429, 502, 503, 504}
+_BACKOFF_BASE_SECONDS = 1.5
+_BACKOFF_MAX_SECONDS = 20.0
+
 
 def _is_tls_error(error: str) -> bool:
     lowered = error.lower()
     return any(marker in lowered for marker in _TLS_ERROR_MARKERS)
+
+
+def _parse_retry_after(value: str | None) -> float | None:
+    if not value:
+        return None
+    try:
+        return max(0.0, float(value))
+    except ValueError:
+        return None
 
 
 def _visible_text(html: str) -> str:
@@ -50,26 +66,6 @@ async def _maybe_await(fn, *args):
     result = fn(*args)
     if asyncio.iscoroutine(result):
         await result
-
-
-async def _fetch_with_redirect_chain(
-    client: httpx.AsyncClient, url: str, max_hops: int = MAX_REDIRECT_HOPS
-) -> tuple[Optional[httpx.Response], list[tuple[str, int]], str]:
-    chain: list[tuple[str, int]] = []
-    current = url
-    for _ in range(max_hops):
-        try:
-            response = await client.get(current, follow_redirects=False)
-        except httpx.RequestError as exc:
-            return None, chain, str(exc)
-
-        if response.status_code in (301, 302, 303, 307, 308) and "location" in response.headers:
-            chain.append((current, response.status_code))
-            current = url_utils.normalize_url(response.headers["location"], base=current)
-            continue
-        return response, chain, ""
-
-    return None, chain, "too_many_redirects"
 
 
 class Crawler:
@@ -90,6 +86,12 @@ class Crawler:
         # otherwise each try to launch their own Playwright/Chromium
         # instance simultaneously, corrupting self._browser/self._playwright.
         self._browser_lock = asyncio.Lock()
+        # Shared across every in-flight request: when a site (or its
+        # CDN/WAF) answers 429/503, every worker pauses until this
+        # timestamp instead of piling on more requests while it's telling
+        # us to slow down.
+        self._backoff_until = 0.0
+        self._backoff_notified_at = 0.0
         self._on_status: OnStatus | None = None
         self._exclude_regexes: list[re.Pattern] = []
         for pattern in config.exclude_patterns:
@@ -131,6 +133,70 @@ class Crawler:
     async def _status(self, message: str) -> None:
         await _maybe_await(self._on_status, message)
 
+    async def _wait_for_backoff(self) -> None:
+        now = time.monotonic()
+        if now < self._backoff_until:
+            await asyncio.sleep(self._backoff_until - now)
+
+    async def _register_throttle(self, delay: float) -> None:
+        """Called whenever a response tells us to slow down. Extends the
+        shared backoff window (never shortens it) so every concurrent
+        request pauses together, and surfaces one status message per
+        few seconds rather than spamming it per-request."""
+        target = time.monotonic() + delay
+        if target > self._backoff_until:
+            self._backoff_until = target
+        now = time.monotonic()
+        if now - self._backoff_notified_at > 3.0:
+            self._backoff_notified_at = now
+            await self._status(f"El sitio pidió bajar la velocidad (HTTP 429/503) — pausando {delay:.1f}s…")
+
+    async def _fetch_with_redirect_chain(
+        self, client: httpx.AsyncClient, url: str, max_hops: int = MAX_REDIRECT_HOPS
+    ) -> tuple[Optional[httpx.Response], list[tuple[str, int]], str]:
+        chain: list[tuple[str, int]] = []
+        current = url
+        for _ in range(max_hops):
+            response, error = await self._get_with_retry(client, current)
+            if response is None:
+                return None, chain, error
+
+            if response.status_code in (301, 302, 303, 307, 308) and "location" in response.headers:
+                chain.append((current, response.status_code))
+                current = url_utils.normalize_url(response.headers["location"], base=current)
+                continue
+            return response, chain, ""
+
+        return None, chain, "too_many_redirects"
+
+    async def _get_with_retry(self, client: httpx.AsyncClient, url: str) -> tuple[Optional[httpx.Response], str]:
+        """GET with retries: network blips get a plain exponential backoff,
+        429/503-style responses get the delay the site asked for (or a
+        sane default) and pause every other in-flight request too — the
+        courteous alternative to just hammering a site that's asking us
+        to slow down."""
+        attempt = 0
+        while True:
+            await self._wait_for_backoff()
+            try:
+                response = await client.get(url, follow_redirects=False)
+            except httpx.RequestError as exc:
+                if attempt >= self.config.max_retries:
+                    return None, str(exc)
+                await asyncio.sleep(min(_BACKOFF_BASE_SECONDS * (2**attempt), _BACKOFF_MAX_SECONDS))
+                attempt += 1
+                continue
+
+            if response.status_code in _THROTTLE_STATUS and attempt < self.config.max_retries:
+                delay = _parse_retry_after(response.headers.get("retry-after"))
+                if delay is None:
+                    delay = min(_BACKOFF_BASE_SECONDS * (2**attempt), _BACKOFF_MAX_SECONDS)
+                await self._register_throttle(delay)
+                attempt += 1
+                continue
+
+            return response, ""
+
     async def run(
         self,
         on_page: OnPage | None = None,
@@ -143,8 +209,19 @@ class Crawler:
         semaphore = asyncio.Semaphore(self.config.concurrency)
         headers = {"User-Agent": self.config.user_agent}
 
+        # Reused keep-alive connections (and HTTP/2 multiplexing where the
+        # server supports it) cut the per-request TCP/TLS handshake cost
+        # that dominates crawl time far more than raising concurrency does.
+        limits = httpx.Limits(
+            max_connections=self.config.concurrency * 4,
+            max_keepalive_connections=self.config.concurrency * 2,
+        )
         async with httpx.AsyncClient(
-            headers=headers, timeout=self.config.request_timeout, follow_redirects=False
+            headers=headers,
+            timeout=self.config.request_timeout,
+            follow_redirects=False,
+            limits=limits,
+            http2=True,
         ) as client:
             await self._status("Leyendo robots.txt…")
             robots_info = await self._fetch_robots(client)
@@ -415,7 +492,7 @@ class Crawler:
 
             await self._status(f"Rastreando {url}")
             start = time.monotonic()
-            response, chain, error = await _fetch_with_redirect_chain(client, url)
+            response, chain, error = await self._fetch_with_redirect_chain(client, url)
             fetch_time_ms = (time.monotonic() - start) * 1000
 
             page = PageResult(url=url, depth=depth, fetch_time_ms=fetch_time_ms, redirect_chain=chain)
@@ -638,7 +715,7 @@ class Crawler:
         host = parsed.netloc or parsed.path
 
         http_url = url_utils.swap_scheme(self.config.seed_url, "http")
-        response, chain, error = await _fetch_with_redirect_chain(client, http_url)
+        response, chain, error = await self._fetch_with_redirect_chain(client, http_url)
         if response is not None:
             final_url = str(response.url)
             result.site_issues.extend(security.check_http_to_https_redirect(chain, final_url))

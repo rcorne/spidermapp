@@ -21,15 +21,15 @@ from PySide6.QtWidgets import (
 from spidermapp.core import auth, tasks
 from spidermapp.gui import theme
 
-_IMPACT_COLOR = {"alto": theme.CRITICAL_HEX, "medio": theme.WARNING_HEX, "bajo": "#9CA3AF"}
+_IMPACT_COLOR = {"alto": theme.CRITICAL_HEX, "medio": theme.WARNING_HEX, "bajo": "#7D8590"}
 _LABEL_PALETTE = {
-    "Técnico": ("#FEF2F2", theme.CRITICAL_HEX),
-    "Contenido": ("#FFFBEB", theme.WARNING_HEX),
-    "Urgente": ("#FEF2F2", theme.CRITICAL_HEX),
-    "Enlaces": ("#F3F4F6", "#6B7280"),
-    "Mantención": ("#ECFDF5", theme.GOOD_HEX),
+    "Técnico": ("#3A2226", theme.CRITICAL_HEX),
+    "Contenido": ("#3A331C", theme.WARNING_HEX),
+    "Urgente": ("#3A2226", theme.CRITICAL_HEX),
+    "Enlaces": ("#262A33", "#9AA1AE"),
+    "Mantención": ("#1F3A2E", theme.GOOD_HEX),
 }
-_DEFAULT_LABEL_COLOR = ("#EEF2FF", theme.PRIMARY)
+_DEFAULT_LABEL_COLOR = (theme.PRIMARY_SOFT, theme.PRIMARY_HOVER)
 
 
 def _label_chip(text: str) -> QLabel:
@@ -62,7 +62,7 @@ class TaskDetailDialog(QDialog):
 
         site_row = QHBoxLayout()
         site_label = QLabel(task.site or "Sin sitio")
-        site_label.setStyleSheet("font-size: 11px; font-weight: 700; color: #6B7280;")
+        site_label.setStyleSheet("font-size: 11px; font-weight: 700; color: #9AA1AE;")
         site_row.addWidget(site_label)
         site_row.addStretch(1)
         labels_row = QHBoxLayout()
@@ -74,7 +74,7 @@ class TaskDetailDialog(QDialog):
 
         title = QLabel(task.title)
         title.setWordWrap(True)
-        title.setStyleSheet("font-size: 16px; font-weight: 700; color: #111827;")
+        title.setStyleSheet("font-size: 16px; font-weight: 700; color: #E7E9EE;")
         outer.addWidget(title)
 
         status_row = QHBoxLayout()
@@ -97,7 +97,7 @@ class TaskDetailDialog(QDialog):
         content_layout.setSpacing(6)
 
         checklist_header = QLabel("SUB-TAREAS")
-        checklist_header.setStyleSheet("font-size: 10.5px; font-weight: 700; color: #9CA3AF; letter-spacing: 0.04em;")
+        checklist_header.setStyleSheet("font-size: 10.5px; font-weight: 700; color: #7D8590; letter-spacing: 0.04em;")
         content_layout.addWidget(checklist_header)
         self.checklist_layout = QVBoxLayout()
         self.checklist_layout.setSpacing(4)
@@ -115,7 +115,7 @@ class TaskDetailDialog(QDialog):
         content_layout.addLayout(add_check_row)
 
         comments_header = QLabel("COMENTARIOS")
-        comments_header.setStyleSheet("font-size: 10.5px; font-weight: 700; color: #9CA3AF; letter-spacing: 0.04em; margin-top: 10px;")
+        comments_header.setStyleSheet("font-size: 10.5px; font-weight: 700; color: #7D8590; letter-spacing: 0.04em; margin-top: 10px;")
         content_layout.addWidget(comments_header)
         self.comments_layout = QVBoxLayout()
         self.comments_layout.setSpacing(8)
@@ -181,15 +181,15 @@ class TaskDetailDialog(QDialog):
                 item.widget().deleteLater()
         if not self._task.comments:
             empty = QLabel("Sin comentarios todavía.")
-            empty.setStyleSheet("font-size: 11.5px; color: #9CA3AF; font-style: italic;")
+            empty.setStyleSheet("font-size: 11.5px; color: #7D8590; font-style: italic;")
             self.comments_layout.addWidget(empty)
             return
         for comment in self._task.comments:
             when = datetime.fromtimestamp(comment.created_at).strftime("%d/%m %H:%M")
-            box = QLabel(f"<b>{comment.author}</b> <span style='color:#9CA3AF;font-size:10px;'>{when}</span><br>{comment.text}")
+            box = QLabel(f"<b>{comment.author}</b> <span style='color:#7D8590;font-size:10px;'>{when}</span><br>{comment.text}")
             box.setTextFormat(Qt.TextFormat.RichText)
             box.setWordWrap(True)
-            box.setStyleSheet("font-size: 12px; color: #374151;")
+            box.setStyleSheet("font-size: 12px; color: #C3C7D1;")
             self.comments_layout.addWidget(box)
 
     def _add_comment(self) -> None:
@@ -210,7 +210,7 @@ class TaskCard(QFrame):
         self._task = task
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setStyleSheet(
-            "TaskCard { background: white; border: 1px solid #E5E7EB; border-radius: 8px; } "
+            "TaskCard { background: #1C1F26; border: 1px solid #2D313B; border-radius: 8px; } "
             "TaskCard:hover { border-color: " + theme.PRIMARY + "; }"
         )
         layout = QVBoxLayout(self)
@@ -227,17 +227,17 @@ class TaskCard(QFrame):
 
         title = QLabel(task.title)
         title.setWordWrap(True)
-        title.setStyleSheet("font-size: 12.5px; font-weight: 600; color: #111827;")
+        title.setStyleSheet("font-size: 12.5px; font-weight: 600; color: #E7E9EE;")
         layout.addWidget(title)
 
         foot = QHBoxLayout()
         site_label = QLabel(task.site or "—")
-        site_label.setStyleSheet(f"font-size: 10px; font-weight: 700; color: {_IMPACT_COLOR.get(task.impact, '#9CA3AF')};")
+        site_label.setStyleSheet(f"font-size: 10px; font-weight: 700; color: {_IMPACT_COLOR.get(task.impact, '#7D8590')};")
         foot.addWidget(site_label)
         foot.addStretch(1)
         if task.comments:
             comment_label = QLabel(f"💬 {len(task.comments)}")
-            comment_label.setStyleSheet("font-size: 10.5px; color: #9CA3AF;")
+            comment_label.setStyleSheet("font-size: 10.5px; color: #7D8590;")
             foot.addWidget(comment_label)
         if task.assignee:
             av = QLabel(task.assignee[:2].upper())
@@ -262,7 +262,7 @@ class BoardColumn(QWidget):
         layout.setSpacing(8)
 
         self.header = QLabel(status)
-        self.header.setStyleSheet("font-size: 12.5px; font-weight: 700; color: #374151;")
+        self.header.setStyleSheet("font-size: 12.5px; font-weight: 700; color: #C3C7D1;")
         layout.addWidget(self.header)
 
         self.cards_layout = QVBoxLayout()
@@ -293,11 +293,11 @@ class BoardView(QWidget):
         outer.setContentsMargins(0, 0, 0, 0)
 
         header = QWidget()
-        header.setStyleSheet("background: white; border-bottom: 1px solid #E5E7EB;")
+        header.setStyleSheet("background: #1C1F26; border-bottom: 1px solid #2D313B;")
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(20, 14, 20, 14)
         title = QLabel("Tablero")
-        title.setStyleSheet("font-size: 18px; font-weight: 700; color: #111827;")
+        title.setStyleSheet("font-size: 18px; font-weight: 700; color: #E7E9EE;")
         header_layout.addWidget(title)
         header_layout.addStretch(1)
         add_btn = QPushButton("+ Tarea")

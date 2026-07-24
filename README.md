@@ -1,7 +1,11 @@
-# Spidermapp
+# Pidgeot
 
 Auditor de SEO de escritorio, similar a Screaming Frog SEO Spider. Rastrea un sitio siguiendo
 enlaces internos y audita cada URL contra una lista amplia de checks técnicos de SEO.
+
+(El paquete de Python y el repositorio conservan el nombre interno `spidermapp` — solo el
+branding de cara al usuario, el `.app`/`.dmg` empaquetados y el título de la ventana usan
+"Pidgeot".)
 
 ## Instalación
 
@@ -32,7 +36,7 @@ izquierda filtra por categoría de issue. Exporta a CSV o XLSX desde la barra su
 Ya generado en este repo: [`packaging/icon/Spidermapp.icns`](packaging/icon/Spidermapp.icns) (ícono,
 diseñado a partir de [`spidermapp_icon.svg`](packaging/icon/spidermapp_icon.svg)),
 [`packaging/spidermapp.spec`](packaging/spidermapp.spec) (spec de PyInstaller) y
-`packaging/Spidermapp.dmg` (instalador). Para regenerarlos tras cambios en el código:
+`packaging/Pidgeot.dmg` (instalador). Para regenerarlos tras cambios en el código:
 
 ```bash
 source .venv/bin/activate
@@ -41,29 +45,29 @@ rm -rf build dist
 pyinstaller packaging/spidermapp.spec --noconfirm
 ```
 
-Esto produce `dist/Spidermapp.app`. Para armar el `.dmg` (app + acceso directo a /Applications,
+Esto produce `dist/Pidgeot.app`. Para armar el `.dmg` (app + acceso directo a /Applications,
 con ícono de volumen propio):
 
 ```bash
-rm -rf packaging/dmg_staging packaging/Spidermapp.dmg
+rm -rf packaging/dmg_staging packaging/Pidgeot.dmg
 mkdir -p packaging/dmg_staging
-cp -R dist/Spidermapp.app packaging/dmg_staging/
+cp -R dist/Pidgeot.app packaging/dmg_staging/
 ln -s /Applications packaging/dmg_staging/Applications
 cp packaging/icon/Spidermapp.icns packaging/dmg_staging/.VolumeIcon.icns
-hdiutil create -srcfolder packaging/dmg_staging -volname "Spidermapp" -fs HFS+ -format UDRW -ov packaging/Spidermapp_rw.dmg
-VOLUME=$(hdiutil attach packaging/Spidermapp_rw.dmg -readwrite -noverify -noautoopen | grep -Eo '/Volumes/.*')
+hdiutil create -srcfolder packaging/dmg_staging -volname "Pidgeot" -fs HFS+ -format UDRW -ov packaging/Pidgeot_rw.dmg
+VOLUME=$(hdiutil attach packaging/Pidgeot_rw.dmg -readwrite -noverify -noautoopen | grep -Eo '/Volumes/.*')
 SetFile -a C "$VOLUME"
 hdiutil detach "$VOLUME"
-hdiutil convert packaging/Spidermapp_rw.dmg -format UDZO -o packaging/Spidermapp.dmg -ov
-rm -f packaging/Spidermapp_rw.dmg
+hdiutil convert packaging/Pidgeot_rw.dmg -format UDZO -o packaging/Pidgeot.dmg -ov
+rm -f packaging/Pidgeot_rw.dmg
 ```
 
-Para instalar: abre el `.dmg` y arrastra `Spidermapp.app` al acceso directo de Applications, o
-directamente `cp -R dist/Spidermapp.app /Applications/`.
+Para instalar: abre el `.dmg` y arrastra `Pidgeot.app` al acceso directo de Applications, o
+directamente `cp -R dist/Pidgeot.app /Applications/`.
 
 **Nota sobre Playwright en la app empaquetada:** el binario de Chromium (~170 MB) no viaja dentro
 del `.app` — Playwright lo busca en `~/Library/Caches/ms-playwright`, el mismo caché que usa
-cualquier instalación de Playwright en esa Mac. Si Spidermapp se instala en una máquina donde
+cualquier instalación de Playwright en esa Mac. Si Pidgeot se instala en una máquina donde
 nunca se corrió `playwright install chromium`, el check de renderizado fallará hasta correr ese
 comando una vez en esa Mac (con cualquier Python que tenga `playwright` instalado, no hace falta
 el venv del proyecto).

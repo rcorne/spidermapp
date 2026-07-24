@@ -41,7 +41,7 @@ class GithubInfoWorker(QThread):
         try:
             response = httpx.get(
                 GITHUB_API_URL,
-                headers={"Accept": "application/vnd.github+json", "User-Agent": "Spidermapp-About-Dialog"},
+                headers={"Accept": "application/vnd.github+json", "User-Agent": "Pidgeot-About-Dialog"},
                 timeout=8.0,
             )
         except httpx.RequestError as exc:
@@ -64,7 +64,7 @@ class GithubInfoWorker(QThread):
 class AboutDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Acerca de Spidermapp")
+        self.setWindowTitle("Acerca de Pidgeot")
         self.setFixedWidth(420)
 
         self._worker: GithubInfoWorker | None = None
@@ -83,21 +83,21 @@ class AboutDialog(QDialog):
 
         title_box = QVBoxLayout()
         title_box.setSpacing(2)
-        name = QLabel("Spidermapp")
-        name.setStyleSheet("font-size: 19px; font-weight: 700; color: #111827;")
+        name = QLabel("Pidgeot")
+        name.setStyleSheet("font-size: 19px; font-weight: 700; color: #E7E9EE;")
         title_box.addWidget(name)
         version = QLabel(f"Versión {APP_VERSION}")
-        version.setStyleSheet("font-size: 12px; color: #6B7280;")
+        version.setStyleSheet("font-size: 12px; color: #9AA1AE;")
         title_box.addWidget(version)
         tagline = QLabel("Auditor de SEO de escritorio")
-        tagline.setStyleSheet("font-size: 12px; color: #6B7280;")
+        tagline.setStyleSheet("font-size: 12px; color: #9AA1AE;")
         title_box.addWidget(tagline)
         header.addLayout(title_box, stretch=1)
         outer.addLayout(header)
 
         rule1 = QFrame()
         rule1.setFrameShape(QFrame.Shape.HLine)
-        rule1.setStyleSheet("color: #E5E7EB;")
+        rule1.setStyleSheet("color: #2D313B;")
         outer.addWidget(rule1)
 
         info = QLabel(
@@ -107,23 +107,23 @@ class AboutDialog(QDialog):
         )
         info.setTextFormat(Qt.TextFormat.RichText)
         info.setOpenExternalLinks(True)
-        info.setStyleSheet("font-size: 12.5px; color: #374151;")
+        info.setStyleSheet("font-size: 12.5px; color: #C3C7D1;")
         outer.addWidget(info)
 
         rule2 = QFrame()
         rule2.setFrameShape(QFrame.Shape.HLine)
-        rule2.setStyleSheet("color: #E5E7EB;")
+        rule2.setStyleSheet("color: #2D313B;")
         outer.addWidget(rule2)
 
         github_header = QLabel("Datos de GitHub")
-        github_header.setStyleSheet("font-size: 12px; font-weight: 700; color: #374151;")
+        github_header.setStyleSheet("font-size: 12px; font-weight: 700; color: #C3C7D1;")
         outer.addWidget(github_header)
 
         self.github_status = QLabel("Consultando GitHub…")
         self.github_status.setWordWrap(True)
         self.github_status.setTextFormat(Qt.TextFormat.RichText)
         self.github_status.setOpenExternalLinks(True)
-        self.github_status.setStyleSheet("font-size: 12px; color: #6B7280;")
+        self.github_status.setStyleSheet("font-size: 12px; color: #9AA1AE;")
         outer.addWidget(self.github_status)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)

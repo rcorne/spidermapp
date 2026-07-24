@@ -21,12 +21,14 @@ elif sys.platform == "win32":
 
 from PySide6.QtWidgets import QApplication
 
+from spidermapp.gui import theme
 from spidermapp.gui.main_window import MainWindow
 
 
 def main() -> int:
     app = QApplication(sys.argv)
-    app.setApplicationName("Spidermapp")
+    app.setApplicationName("Pidgeot")
+    theme.apply_dark_palette(app)
     window = MainWindow()
     window.show()
     return app.exec()

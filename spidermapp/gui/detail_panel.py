@@ -44,7 +44,7 @@ class IssueCard(QFrame):
         color = _SEVERITY_HEX[issue.severity]
 
         self.setStyleSheet(
-            f"IssueCard {{ background: white; border: 1px solid #E5E7EB; border-left: 4px solid {color}; "
+            f"IssueCard {{ background: #1C1F26; border: 1px solid #2D313B; border-left: 4px solid {color}; "
             f"border-radius: 4px; }}"
         )
         layout = QVBoxLayout(self)
@@ -54,21 +54,21 @@ class IssueCard(QFrame):
         header = QLabel(
             f'<span style="color:{color}; font-weight:700; font-size:10.5px; text-transform:uppercase;">'
             f"{_SEVERITY_LABEL_ES[issue.severity]}</span>"
-            f'<span style="color:#9CA3AF; font-size:10.5px;"> · {issue.category.value}</span>'
+            f'<span style="color:#7D8590; font-size:10.5px;"> · {issue.category.value}</span>'
         )
         layout.addWidget(header)
 
         title = QLabel(rec.title)
         title.setTextFormat(Qt.TextFormat.PlainText)  # recommendation text may contain literal "<title>" etc.
         title.setWordWrap(True)
-        title.setStyleSheet("font-size: 13.5px; font-weight: 700; color: #111827;")
+        title.setStyleSheet("font-size: 13.5px; font-weight: 700; color: #E7E9EE;")
         layout.addWidget(title)
 
         if rec.why:
             why = QLabel(rec.why)
             why.setTextFormat(Qt.TextFormat.PlainText)
             why.setWordWrap(True)
-            why.setStyleSheet("font-size: 12px; color: #6B7280;")
+            why.setStyleSheet("font-size: 12px; color: #9AA1AE;")
             layout.addWidget(why)
 
         if rec.fix_steps:
@@ -77,7 +77,7 @@ class IssueCard(QFrame):
             ) + "</ol>"
             steps = QLabel(steps_html)
             steps.setWordWrap(True)
-            steps.setStyleSheet("font-size: 12px; color: #374151;")
+            steps.setStyleSheet("font-size: 12px; color: #C3C7D1;")
             layout.addWidget(steps)
 
 
