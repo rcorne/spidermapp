@@ -27,7 +27,7 @@ from spidermapp.gui.main_window import MainWindow
 
 def main() -> int:
     app = QApplication(sys.argv)
-    app.setApplicationName("Pidgeot")
+    app.setApplicationName("Pidge")
     theme.apply_dark_palette(app)
     window = MainWindow()
     window.show()

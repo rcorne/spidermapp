@@ -35,7 +35,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name="Pidgeot",
+    name="Pidge",
     debug=False,
     strip=False,
     upx=False,
@@ -49,20 +49,20 @@ coll = COLLECT(
     a.datas,
     strip=False,
     upx=False,
-    name="Pidgeot",
+    name="Pidge",
 )
 
 app = BUNDLE(
     coll,
-    name="Pidgeot.app",
+    name="Pidge.app",
     icon=ICON_PATH,
-    bundle_identifier="com.pidgeot.seoaudit",
+    bundle_identifier="com.pidge.seoaudit",
     info_plist={
-        "CFBundleName": "Pidgeot",
-        "CFBundleDisplayName": "Pidgeot",
+        "CFBundleName": "Pidge",
+        "CFBundleDisplayName": "Pidge",
         "CFBundleShortVersionString": "0.1.0",
         "CFBundleVersion": "0.1.0",
         "NSHighResolutionCapable": True,
-        "NSHumanReadableCopyright": "Pidgeot",
+        "NSHumanReadableCopyright": "Pidge",
     },
 )

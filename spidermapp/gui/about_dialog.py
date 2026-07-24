@@ -41,7 +41,7 @@ class GithubInfoWorker(QThread):
         try:
             response = httpx.get(
                 GITHUB_API_URL,
-                headers={"Accept": "application/vnd.github+json", "User-Agent": "Pidgeot-About-Dialog"},
+                headers={"Accept": "application/vnd.github+json", "User-Agent": "Pidge-About-Dialog"},
                 timeout=8.0,
             )
         except httpx.RequestError as exc:
@@ -64,7 +64,7 @@ class GithubInfoWorker(QThread):
 class AboutDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Acerca de Pidgeot")
+        self.setWindowTitle("Acerca de Pidge")
         self.setFixedWidth(420)
 
         self._worker: GithubInfoWorker | None = None
@@ -83,7 +83,7 @@ class AboutDialog(QDialog):
 
         title_box = QVBoxLayout()
         title_box.setSpacing(2)
-        name = QLabel("Pidgeot")
+        name = QLabel("Pidge")
         name.setStyleSheet("font-size: 19px; font-weight: 700; color: #E7E9EE;")
         title_box.addWidget(name)
         version = QLabel(f"Versión {APP_VERSION}")

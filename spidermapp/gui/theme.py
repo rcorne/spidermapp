@@ -4,32 +4,42 @@ from PySide6.QtGui import QColor, QPalette
 
 from spidermapp.core.models import IssueSeverity
 
-# Dark is the app's only theme (matches the rail nav's #171B21 dark aesthetic
-# from the redesign mockup) — there is no light-mode variant to fall back to.
-BG = "#14161B"
-BG_ELEVATED = "#1C1F26"
-BG_SOFT = "#20232B"
-BG_CHIP = "#262A33"
-BORDER = "#2D313B"
+# Dark is the app's only theme. Palette is Teams-inspired (compact icon
+# rail + a filled accent pill for the active item) but green-leaning
+# instead of Teams' purple — there is no light-mode variant to fall back to.
+BG = "#101512"
+BG_ELEVATED = "#171F1B"
+BG_SOFT = "#1B2420"
+BG_CHIP = "#212B25"
+BORDER = "#28332C"
 
-TEXT_PRIMARY = "#E7E9EE"
-TEXT_SECONDARY = "#C3C7D1"
-TEXT_MUTED = "#9AA1AE"
-TEXT_FAINT = "#7D8590"
+TEXT_PRIMARY = "#E7EDE9"
+TEXT_SECONDARY = "#C1CCC5"
+TEXT_MUTED = "#93A69C"
+TEXT_FAINT = "#748076"
 
-PRIMARY = "#6366F1"
-PRIMARY_HOVER = "#818CF8"
-PRIMARY_PRESSED = "#4F46E5"
-PRIMARY_SOFT = "#2C2A55"
+PRIMARY = "#2FBE81"
+PRIMARY_HOVER = "#4FD59B"
+PRIMARY_PRESSED = "#22995F"
+PRIMARY_SOFT = "#1B3A2C"
 
 DANGER = "#EF4444"
 DANGER_HOVER = "#F87171"
 DANGER_SOFT = "#3A2226"
 
-GOOD_HEX = "#10B981"
+GOOD_HEX = "#2FBE81"
 CRITICAL_HEX = "#F87171"
 WARNING_HEX = "#FBBF24"
 INFO_HEX = "#60A5FA"
+
+# Rail nav (left icon bar) — one shade darker than the main background,
+# same green cast, with a filled pill for the active item like Teams.
+RAIL_BG = "#0B0F0D"
+RAIL_BORDER = "#1C2620"
+RAIL_TEXT = "#8CA096"
+RAIL_TEXT_ACTIVE = "#EAF5EF"
+RAIL_HOVER = "#182019"
+RAIL_ACTIVE_BG = PRIMARY_SOFT
 
 SEVERITY_HEX = {
     IssueSeverity.CRITICAL: CRITICAL_HEX,

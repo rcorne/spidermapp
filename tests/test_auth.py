@@ -58,8 +58,8 @@ def test_exchange_code_sends_pkce_verifier_and_parses_response(monkeypatch):
         captured["body"] = request.read().decode()
         return httpx.Response(200, json={"access_token": "tok123", "id_token": "abc.def.ghi"})
 
-    def fake_post(url, data=None, timeout=None):
-        return httpx.Client(transport=httpx.MockTransport(handler)).post(url, data=data)
+    def fake_post(url, data=None, headers=None, timeout=None):
+        return httpx.Client(transport=httpx.MockTransport(handler)).post(url, data=data, headers=headers)
 
     monkeypatch.setattr(auth.httpx, "post", fake_post)
     tokens = auth._exchange_code(auth.PROVIDERS["google"], "cid", "", "code-1", "verifier-1")
@@ -72,8 +72,8 @@ def test_exchange_code_raises_on_error_response(monkeypatch):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(400, text="invalid_grant")
 
-    def fake_post(url, data=None, timeout=None):
-        return httpx.Client(transport=httpx.MockTransport(handler)).post(url, data=data)
+    def fake_post(url, data=None, headers=None, timeout=None):
+        return httpx.Client(transport=httpx.MockTransport(handler)).post(url, data=data, headers=headers)
 
     monkeypatch.setattr(auth.httpx, "post", fake_post)
     with pytest.raises(auth.AuthError):
@@ -90,7 +90,7 @@ def test_fetch_profile_uses_userinfo_endpoint_when_available(monkeypatch):
 
     monkeypatch.setattr(auth.httpx, "get", fake_get)
     profile = auth._fetch_profile(auth.PROVIDERS["google"], {"access_token": "tok123"})
-    assert profile == {"name": "Ana Torres", "email": "ana@example.com", "picture": "https://x/y.png"}
+    assert profile == {"name": "Ana Torres", "email": "ana@example.com", "picture": "https://x/y.png", "subject": ""}
 
 
 def test_fetch_profile_decodes_id_token_for_apple():
@@ -109,7 +109,7 @@ def test_run_login_flow_rejects_missing_client_id():
 
 def test_run_login_flow_rejects_missing_required_secret():
     with pytest.raises(auth.AuthError):
-        auth.run_login_flow("linkedin", client_id="cid", client_secret="")
+        auth.run_login_flow("github", client_id="cid", client_secret="")
 
 
 def test_run_login_flow_rejects_unknown_provider():

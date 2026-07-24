@@ -113,7 +113,7 @@ def _check_wikipedia(brand: str) -> tuple[bool, str, str]:
                 f"https://{lang}.wikipedia.org/w/api.php",
                 params={"action": "opensearch", "search": brand, "limit": 1, "namespace": 0, "format": "json"},
                 timeout=_HTTP_TIMEOUT,
-                headers={"User-Agent": "PidgeotBot/0.1 (+SEO audit tool; public data only)"},
+                headers={"User-Agent": "PidgeBot/0.1 (+SEO audit tool; public data only)"},
             )
             response.raise_for_status()
             data = response.json()

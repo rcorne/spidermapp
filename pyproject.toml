@@ -20,13 +20,20 @@ dependencies = [
     "fpdf2>=2.7",
     "python-pptx>=1.0",
     "cryptography>=42.0",
+    "websockets>=12.0",
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "sqlalchemy>=2.0",
+    "bcrypt>=4.1",
+    "pyjwt>=2.8",
+    "pydantic[email]>=2.6",
 ]
 
 [project.scripts]
 spidermapp = "spidermapp.main:main"
 
 [tool.setuptools.packages.find]
-include = ["spidermapp*"]
+include = ["spidermapp*", "pidge_server*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

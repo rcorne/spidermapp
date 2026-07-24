@@ -20,7 +20,7 @@ import httpx
 # apps (RFC 8252): open the system browser, catch the redirect on a local
 # loopback server, exchange the code for tokens server-to-server. No secret
 # is required on the wire for the browser leg — only in the token exchange,
-# and only for providers that mandate one (LinkedIn; Apple via a signed JWT).
+# and only for providers that mandate one (GitHub; Apple via a signed JWT).
 #
 # Spidermapp cannot register OAuth apps on the user's behalf — each provider
 # requires its own developer console entry with this exact redirect URI.
@@ -61,15 +61,15 @@ PROVIDERS: dict[str, ProviderSpec] = {
         extra_authorize_params={"access_type": "offline", "prompt": "consent"},
         help_url="https://console.cloud.google.com/apis/credentials",
     ),
-    "linkedin": ProviderSpec(
-        key="linkedin",
-        label="LinkedIn",
-        authorize_url="https://www.linkedin.com/oauth/v2/authorization",
-        token_url="https://www.linkedin.com/oauth/v2/accessToken",
-        scope="openid profile email",
-        userinfo_url="https://api.linkedin.com/v2/userinfo",
+    "github": ProviderSpec(
+        key="github",
+        label="GitHub",
+        authorize_url="https://github.com/login/oauth/authorize",
+        token_url="https://github.com/login/oauth/access_token",
+        scope="read:user user:email",
+        userinfo_url="https://api.github.com/user",
         requires_secret=True,
-        help_url="https://www.linkedin.com/developers/apps",
+        help_url="https://github.com/settings/developers",
     ),
     "apple": ProviderSpec(
         key="apple",
@@ -120,7 +120,7 @@ def build_authorize_url(provider: ProviderSpec, client_id: str, state: str, code
 
 
 # ---------------------------------------------------------------------------
-# Local redirect server — catches both GET (Google/LinkedIn) and POST
+# Local redirect server — catches both GET (Google/GitHub) and POST
 # (Apple, which mandates response_mode=form_post whenever name/email scopes
 # are requested).
 # ---------------------------------------------------------------------------
@@ -179,7 +179,10 @@ def _exchange_code(provider: ProviderSpec, client_id: str, client_secret: str, c
     }
     if client_secret:
         data["client_secret"] = client_secret
-    response = httpx.post(provider.token_url, data=data, timeout=20.0)
+    # GitHub's token endpoint replies form-urlencoded unless explicitly
+    # asked for JSON; Google/Apple return JSON either way, so this is safe
+    # to send unconditionally.
+    response = httpx.post(provider.token_url, data=data, headers={"Accept": "application/json"}, timeout=20.0)
     if response.status_code >= 400:
         raise AuthError(f"El proveedor rechazó el intercambio de token: {response.text[:300]}")
     return response.json()
@@ -197,29 +200,64 @@ def decode_jwt_payload(token: str) -> dict:
         return {}
 
 
+def _fetch_github_primary_email(access_token: str) -> str:
+    """GitHub's /user endpoint omits email entirely when the user hasn't
+    made one public, even with user:email scope granted — the verified
+    address only shows up via this separate endpoint."""
+    response = httpx.get(
+        "https://api.github.com/user/emails",
+        headers={"Authorization": f"Bearer {access_token}", "Accept": "application/vnd.github+json"},
+        timeout=15.0,
+    )
+    if response.status_code >= 400:
+        return ""
+    for entry in response.json():
+        if entry.get("primary") and entry.get("verified"):
+            return entry.get("email", "")
+    return ""
+
+
 def _fetch_profile(provider: ProviderSpec, tokens: dict) -> dict:
     if provider.userinfo_url:
         access_token = tokens.get("access_token", "")
         response = httpx.get(
-            provider.userinfo_url, headers={"Authorization": f"Bearer {access_token}"}, timeout=15.0
+            provider.userinfo_url,
+            headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
+            timeout=15.0,
         )
         if response.status_code >= 400:
             raise AuthError(f"No se pudo obtener el perfil: {response.text[:300]}")
         data = response.json()
+
+        if provider.key == "github":
+            email = data.get("email") or _fetch_github_primary_email(access_token)
+            return {
+                "name": data.get("name") or data.get("login", ""),
+                "email": email,
+                "picture": data.get("avatar_url", ""),
+                "subject": str(data.get("id", "")),
+            }
+
         return {
             "name": data.get("name") or data.get("given_name", ""),
             "email": data.get("email", ""),
             "picture": data.get("picture", ""),
+            "subject": data.get("sub", ""),
         }
 
     claims = decode_jwt_payload(tokens.get("id_token", ""))
     email = claims.get("email", "")
-    return {"name": email.split("@")[0] if email else "Usuario de Apple", "email": email, "picture": ""}
+    return {
+        "name": email.split("@")[0] if email else "Usuario de Apple",
+        "email": email,
+        "picture": "",
+        "subject": claims.get("sub", ""),
+    }
 
 
 # ---------------------------------------------------------------------------
 # Apple's client_secret must be a JWT signed with the Sign in with Apple
-# private key (ES256) — not a plain string like Google/LinkedIn use.
+# private key (ES256) — not a plain string like Google/GitHub use.
 # ---------------------------------------------------------------------------
 
 

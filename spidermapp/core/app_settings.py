@@ -6,7 +6,7 @@ from pathlib import Path
 
 SETTINGS_PATH = Path.home() / ".spidermapp" / "settings.json"
 
-DEFAULT_USER_AGENT = "PidgeotBot/0.1 (+https://example.invalid/bot)"
+DEFAULT_USER_AGENT = "PidgeBot/0.1 (+https://example.invalid/bot)"
 
 
 @dataclass
@@ -29,6 +29,9 @@ class AppSettings:
     default_follow_nofollow: bool = True
     default_max_query_params: int = 0
     default_max_links_per_page: int = 0
+    # pidge_server — the backend for accounts + chat. Defaults to a local
+    # instance; point it at wherever the team actually deploys the server.
+    backend_url: str = "http://127.0.0.1:8000"
 
 
 def load_settings(path: Path = SETTINGS_PATH) -> AppSettings:

@@ -1,11 +1,11 @@
-# Pidgeot
+# Pidge
 
 Auditor de SEO de escritorio, similar a Screaming Frog SEO Spider. Rastrea un sitio siguiendo
 enlaces internos y audita cada URL contra una lista amplia de checks técnicos de SEO.
 
 (El paquete de Python y el repositorio conservan el nombre interno `spidermapp` — solo el
 branding de cara al usuario, el `.app`/`.dmg` empaquetados y el título de la ventana usan
-"Pidgeot".)
+"Pidge".)
 
 ## Instalación
 
@@ -36,7 +36,7 @@ izquierda filtra por categoría de issue. Exporta a CSV o XLSX desde la barra su
 Ya generado en este repo: [`packaging/icon/Spidermapp.icns`](packaging/icon/Spidermapp.icns) (ícono,
 diseñado a partir de [`spidermapp_icon.svg`](packaging/icon/spidermapp_icon.svg)),
 [`packaging/spidermapp.spec`](packaging/spidermapp.spec) (spec de PyInstaller) y
-`packaging/Pidgeot.dmg` (instalador). Para regenerarlos tras cambios en el código:
+`packaging/Pidge.dmg` (instalador). Para regenerarlos tras cambios en el código:
 
 ```bash
 source .venv/bin/activate
@@ -45,32 +45,59 @@ rm -rf build dist
 pyinstaller packaging/spidermapp.spec --noconfirm
 ```
 
-Esto produce `dist/Pidgeot.app`. Para armar el `.dmg` (app + acceso directo a /Applications,
+Esto produce `dist/Pidge.app`. Para armar el `.dmg` (app + acceso directo a /Applications,
 con ícono de volumen propio):
 
 ```bash
-rm -rf packaging/dmg_staging packaging/Pidgeot.dmg
+rm -rf packaging/dmg_staging packaging/Pidge.dmg
 mkdir -p packaging/dmg_staging
-cp -R dist/Pidgeot.app packaging/dmg_staging/
+cp -R dist/Pidge.app packaging/dmg_staging/
 ln -s /Applications packaging/dmg_staging/Applications
 cp packaging/icon/Spidermapp.icns packaging/dmg_staging/.VolumeIcon.icns
-hdiutil create -srcfolder packaging/dmg_staging -volname "Pidgeot" -fs HFS+ -format UDRW -ov packaging/Pidgeot_rw.dmg
-VOLUME=$(hdiutil attach packaging/Pidgeot_rw.dmg -readwrite -noverify -noautoopen | grep -Eo '/Volumes/.*')
+hdiutil create -srcfolder packaging/dmg_staging -volname "Pidge" -fs HFS+ -format UDRW -ov packaging/Pidge_rw.dmg
+VOLUME=$(hdiutil attach packaging/Pidge_rw.dmg -readwrite -noverify -noautoopen | grep -Eo '/Volumes/.*')
 SetFile -a C "$VOLUME"
 hdiutil detach "$VOLUME"
-hdiutil convert packaging/Pidgeot_rw.dmg -format UDZO -o packaging/Pidgeot.dmg -ov
-rm -f packaging/Pidgeot_rw.dmg
+hdiutil convert packaging/Pidge_rw.dmg -format UDZO -o packaging/Pidge.dmg -ov
+rm -f packaging/Pidge_rw.dmg
 ```
 
-Para instalar: abre el `.dmg` y arrastra `Pidgeot.app` al acceso directo de Applications, o
-directamente `cp -R dist/Pidgeot.app /Applications/`.
+Para instalar: abre el `.dmg` y arrastra `Pidge.app` al acceso directo de Applications, o
+directamente `cp -R dist/Pidge.app /Applications/`.
 
 **Nota sobre Playwright en la app empaquetada:** el binario de Chromium (~170 MB) no viaja dentro
 del `.app` — Playwright lo busca en `~/Library/Caches/ms-playwright`, el mismo caché que usa
-cualquier instalación de Playwright en esa Mac. Si Pidgeot se instala en una máquina donde
+cualquier instalación de Playwright en esa Mac. Si Pidge se instala en una máquina donde
 nunca se corrió `playwright install chromium`, el check de renderizado fallará hasta correr ese
 comando una vez en esa Mac (con cualquier Python que tenga `playwright` instalado, no hace falta
 el venv del proyecto).
+
+## Cuentas y chat (pidge_server)
+
+Crear cuenta, iniciar sesión con Google/GitHub/Apple, y el chat en tiempo real dependen de
+`pidge_server/`, un backend FastAPI aparte (no vive dentro de la app de escritorio, que no tiene
+servidor propio). Para correrlo localmente:
+
+```bash
+source .venv/bin/activate
+uvicorn pidge_server.main:app --reload
+```
+
+Por defecto escucha en `http://127.0.0.1:8000` y guarda todo (usuarios, mensajes) en SQLite en
+`~/.pidge_server/pidge.db`. La app apunta ahí por defecto (Preferencias → Cuenta → Servidor Pidge);
+mientras el servidor esté corriendo en esa misma Mac, crear cuenta/iniciar sesión/chatear funciona
+igual que cualquier app cliente-servidor.
+
+**Para que varias personas lo usen de verdad** (no solo en una Mac) hay que desplegar
+`pidge_server/` en algún lugar accesible por todos — un VPS propio, o un servicio como Railway,
+Render o Fly.io — y apuntar el campo "Servidor" de cada instalación de Pidge a esa URL. Esa parte
+requiere que tú mismo crees la cuenta de hosting (no puedo crearla ni pagarla en tu nombre); incluye
+[`pidge_server/Dockerfile`](pidge_server/Dockerfile) para facilitarlo. Configura al menos
+`PIDGE_JWT_SECRET` (un secreto real, no el valor de desarrollo) vía variables de entorno en producción.
+
+Inicio de sesión con Google/GitHub/Apple sigue el mismo flujo OAuth PKCE descrito en
+[`spidermapp/core/auth.py`](spidermapp/core/auth.py) — necesitas tus propias credenciales de cada
+proveedor (Preferencias → Cuenta), el mismo requisito que ya aplicaba antes del chat.
 
 ## Tests
 

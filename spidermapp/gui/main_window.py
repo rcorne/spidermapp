@@ -32,6 +32,7 @@ from spidermapp.core.models import CrawlConfig, CrawlResult, IssueCategory, Page
 from spidermapp.gui import paths, theme
 from spidermapp.gui.about_dialog import AboutDialog
 from spidermapp.gui.board_view import BoardView
+from spidermapp.gui.chat_view import ChatView
 from spidermapp.gui.crawl_worker import CrawlWorker
 from spidermapp.gui.dashboard import DashboardTab
 from spidermapp.gui.detail_panel import DetailPanel
@@ -53,7 +54,7 @@ MAX_CRAWL_PAGES = 10000
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Pidgeot — Auditor de SEO")
+        self.setWindowTitle("Pidge — Auditor de SEO")
 
         # Behave like any normal window: shrinkable, and never open wider
         # than the screen the app lands on.
@@ -142,18 +143,27 @@ class MainWindow(QMainWindow):
         self.board_view = BoardView()
         self.view_stack.addWidget(self.board_view)
 
+        self.chat_view = ChatView()
+        self.view_stack.addWidget(self.chat_view)
+
         self.view_stack.setCurrentWidget(self.today_view)
 
         self.setStatusBar(QStatusBar())
         self.statusBar().showMessage("Listo.")
 
     def _on_rail_view_changed(self, key: str) -> None:
+        if key != "chat":
+            self.chat_view.stop()
+
         if key == "hoy":
             self.today_view.refresh()
             self.view_stack.setCurrentWidget(self.today_view)
         elif key == "tablero":
             self.board_view.refresh()
             self.view_stack.setCurrentWidget(self.board_view)
+        elif key == "chat":
+            self.chat_view.start()
+            self.view_stack.setCurrentWidget(self.chat_view)
         else:
             self.view_stack.setCurrentWidget(self.tabs)
 
@@ -180,6 +190,8 @@ class MainWindow(QMainWindow):
             self._worker.stop()
         self._stop_worker_for_quit(self._worker)
         self._stop_worker_for_quit(getattr(self.news_ticker, "_worker", None))
+        self.chat_view.stop()
+        self._stop_worker_for_quit(getattr(self.chat_view, "_worker", None))
 
     @staticmethod
     def _stop_worker_for_quit(worker, timeout_seconds: float = 5.0) -> None:

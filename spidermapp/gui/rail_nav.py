@@ -5,36 +5,39 @@ from PySide6.QtWidgets import QPushButton, QSizePolicy, QVBoxLayout, QWidget
 
 from spidermapp.gui import theme
 
+# Icon-rail navigation modeled on Microsoft Teams' left-edge app bar: a
+# narrow vertical strip of glyph+label buttons, the active one picked out
+# with a filled rounded highlight rather than a plain underline/border.
 RAIL_ITEMS = [
-    ("hoy", "Hoy"),
-    ("auditoria", "Auditoría"),
-    ("tablero", "Tablero"),
+    ("hoy", "◆", "Hoy"),
+    ("auditoria", "▤", "Auditoría"),
+    ("tablero", "▦", "Tablero"),
+    ("chat", "◈", "Chat"),
 ]
 
 _INACTIVE_QSS = f"""
 QPushButton {{
     background: transparent;
-    color: #C7CCD8;
+    color: {theme.RAIL_TEXT};
     border: none;
-    border-radius: 8px;
-    padding: 10px 6px;
+    border-radius: 10px;
+    padding: 10px 4px 8px 4px;
     font-weight: 600;
-    font-size: 11px;
+    font-size: 10px;
     text-align: center;
 }}
-QPushButton:hover {{ background: #232A33; color: #E7EAEE; }}
+QPushButton:hover {{ background: {theme.RAIL_HOVER}; color: {theme.RAIL_TEXT_ACTIVE}; }}
 """
 
 _ACTIVE_QSS = f"""
 QPushButton {{
-    background: #232A33;
-    color: #E7EAEE;
+    background: {theme.RAIL_ACTIVE_BG};
+    color: {theme.RAIL_TEXT_ACTIVE};
     border: none;
-    border-left: 3px solid {theme.PRIMARY};
-    border-radius: 8px;
-    padding: 10px 6px 10px 3px;
+    border-radius: 10px;
+    padding: 10px 4px 8px 4px;
     font-weight: 700;
-    font-size: 11px;
+    font-size: 10px;
     text-align: center;
 }}
 """
@@ -42,8 +45,8 @@ QPushButton {{
 
 class RailNav(QWidget):
     """The left-edge, icon-rail-style navigation from the UX redesign:
-    task-first views (Hoy / Auditoría / Tablero) instead of a flat row of
-    equal-weight tabs. "Auditoría" hosts every existing crawl view
+    task-first views (Hoy / Auditoría / Tablero / Chat) instead of a flat
+    row of equal-weight tabs. "Auditoría" hosts every existing crawl view
     (Vista general, Mapa, Estructura, Tabla, Visibilidad IA, Noticias)
     unchanged — this only changes what sits above them."""
 
@@ -51,19 +54,20 @@ class RailNav(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedWidth(74)
-        self.setStyleSheet("background: #171B21; border-right: 1px solid #262C35;")
+        self.setFixedWidth(72)
+        self.setStyleSheet(f"background: {theme.RAIL_BG}; border-right: 1px solid {theme.RAIL_BORDER};")
         self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Expanding)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 16, 8, 12)
-        layout.setSpacing(4)
+        layout.setSpacing(6)
 
         self._buttons: dict[str, QPushButton] = {}
-        for key, label in RAIL_ITEMS:
-            button = QPushButton(label)
+        for key, glyph, label in RAIL_ITEMS:
+            button = QPushButton(f"{glyph}\n{label}")
             button.setCursor(Qt.CursorShape.PointingHandCursor)
             button.setStyleSheet(_INACTIVE_QSS)
+            button.setToolTip(label)
             button.clicked.connect(lambda _checked=False, k=key: self.set_active(k))
             layout.addWidget(button)
             self._buttons[key] = button
