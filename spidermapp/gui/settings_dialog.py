@@ -19,13 +19,14 @@ from PySide6.QtWidgets import (
 )
 
 from spidermapp.core import app_settings, connectors
+from spidermapp.gui import theme
 from spidermapp.gui.account_tab import AccountTab
 from spidermapp.gui.crawl_settings_widgets import USER_AGENT_PRESETS, EditableUrlList, hint
 
 
 def _section_header(text: str) -> QLabel:
     label = QLabel(text)
-    label.setStyleSheet("font-size: 12px; font-weight: 700; color: #C3C7D1; margin-top: 10px;")
+    label.setStyleSheet(f"font-size: 12px; font-weight: 700; color: {theme.TEXT_SECONDARY}; margin-top: 10px;")
     return label
 
 
@@ -34,7 +35,7 @@ class SettingsDialog(QDialog):
     crawl behavior, and every external API key. Archivo → Preferencias
     (Cmd+,) — nothing configurable lives anywhere else."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, initial_tab: str | None = None):
         super().__init__(parent)
         self.setWindowTitle("Preferencias")
         self.resize(680, 580)
@@ -52,6 +53,11 @@ class SettingsDialog(QDialog):
         tabs.addTab(self._build_connectors_tab(), "Conectores")
         tabs.addTab(AccountTab(), "Cuenta")
 
+        if initial_tab is not None:
+            index = next((i for i in range(tabs.count()) if tabs.tabText(i) == initial_tab), None)
+            if index is not None:
+                tabs.setCurrentIndex(index)
+
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(self._save)
         buttons.rejected.connect(self.reject)
@@ -68,12 +74,19 @@ class SettingsDialog(QDialog):
 
         intro = QLabel("Valores por defecto para cada crawl nuevo. Siempre puedes ajustarlos en la barra superior antes de iniciar.")
         intro.setWordWrap(True)
-        intro.setStyleSheet("color: #C3C7D1; font-size: 12px; margin-bottom: 8px;")
+        intro.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; font-size: 12px; margin-bottom: 8px;")
         layout.addWidget(intro)
 
         form = QFormLayout()
         form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         layout.addLayout(form)
+
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItem("Oscuro", "dark")
+        self.theme_combo.addItem("Claro", "light")
+        self.theme_combo.setCurrentIndex(self.theme_combo.findData(settings.theme))
+        form.addRow("Tema:", self.theme_combo)
+        layout.addWidget(hint("Cambiar el tema requiere reiniciar Pidge para aplicarse."))
 
         self.max_pages_input = QSpinBox()
         self.max_pages_input.setRange(1, 10000)
@@ -280,7 +293,7 @@ class SettingsDialog(QDialog):
             "(~/.spidermapp/connectors.json)."
         )
         intro.setWordWrap(True)
-        intro.setStyleSheet("color: #C3C7D1; font-size: 12px;")
+        intro.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; font-size: 12px;")
         outer.addWidget(intro)
 
         scroll = QScrollArea()
@@ -331,6 +344,7 @@ class SettingsDialog(QDialog):
                 default_max_links_per_page=self.max_links_per_page_spin.value(),
                 default_prevent_sleep=self.prevent_sleep_checkbox.isChecked(),
                 backend_url=app_settings.load_settings().backend_url,
+                theme=self.theme_combo.currentData(),
             )
         )
         config = {key: field.text().strip() for key, field in self._connector_fields.items() if field.text().strip()}

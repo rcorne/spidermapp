@@ -38,13 +38,13 @@ class SidebarRow(QWidget):
         layout.setSpacing(8)
 
         self.label = QLabel(label_text)
-        self.label.setStyleSheet("font-size: 12.5px; color: #C3C7D1;")
+        self.label.setStyleSheet(f"font-size: 12.5px; color: {theme.TEXT_SECONDARY};")
 
         self.bar = StackedBar()
         self.bar.setFixedWidth(52)
 
         self.count = QLabel("0")
-        self.count.setStyleSheet("font-size: 11px; color: #9AA1AE;")
+        self.count.setStyleSheet(f"font-size: 11px; color: {theme.TEXT_MUTED};")
         self.count.setFixedWidth(26)
         self.count.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 

@@ -148,13 +148,13 @@ class AccountTab(QWidget):
 
     def _build_server_section(self) -> QWidget:
         box = QFrame()
-        box.setStyleSheet("QFrame { border: 1px solid #2D313B; border-radius: 8px; }")
+        box.setStyleSheet(f"QFrame {{ border: 1px solid {theme.BORDER}; border-radius: 8px; }}")
         layout = QVBoxLayout(box)
         layout.setContentsMargins(14, 12, 14, 12)
         layout.setSpacing(6)
 
         title = QLabel("Servidor Pidge")
-        title.setStyleSheet("font-size: 13px; font-weight: 700; color: #E7E9EE;")
+        title.setStyleSheet(f"font-size: 13px; font-weight: 700; color: {theme.TEXT_PRIMARY};")
         layout.addWidget(title)
 
         form = QFormLayout()
@@ -183,13 +183,13 @@ class AccountTab(QWidget):
 
     def _build_email_auth_section(self) -> QWidget:
         box = QFrame()
-        box.setStyleSheet("QFrame { border: 1px solid #2D313B; border-radius: 8px; }")
+        box.setStyleSheet(f"QFrame {{ border: 1px solid {theme.BORDER}; border-radius: 8px; }}")
         layout = QVBoxLayout(box)
         layout.setContentsMargins(14, 12, 14, 12)
         layout.setSpacing(6)
 
         title = QLabel("Cuenta Pidge (email y contraseña)")
-        title.setStyleSheet("font-size: 13px; font-weight: 700; color: #E7E9EE;")
+        title.setStyleSheet(f"font-size: 13px; font-weight: 700; color: {theme.TEXT_PRIMARY};")
         layout.addWidget(title)
 
         form = QFormLayout()
@@ -265,7 +265,7 @@ class AccountTab(QWidget):
                 f"({pidge_session.user.email}) · sesión Pidge activa en {pidge_session.server_url}"
             )
             pidge_info.setTextFormat(Qt.TextFormat.RichText)
-            pidge_info.setStyleSheet("font-size: 12.5px; color: #E7E9EE;")
+            pidge_info.setStyleSheet(f"font-size: 12.5px; color: {theme.TEXT_PRIMARY};")
             pidge_row.addWidget(pidge_info, stretch=1)
             pidge_disconnect = QPushButton("Cerrar sesión")
             pidge_disconnect.setStyleSheet(theme.BUTTON_DANGER_QSS)
@@ -274,7 +274,7 @@ class AccountTab(QWidget):
             self.session_layout.addLayout(pidge_row)
         else:
             label = QLabel("Sin sesión Pidge — crea una cuenta, inicia sesión, o conéctate con un proveedor abajo.")
-            label.setStyleSheet("font-size: 12.5px; color: #9AA1AE;")
+            label.setStyleSheet(f"font-size: 12.5px; color: {theme.TEXT_MUTED};")
             self.session_layout.addWidget(label)
 
         session = auth.load_session()
@@ -291,7 +291,7 @@ class AccountTab(QWidget):
             f"conectado el {datetime.fromtimestamp(session.get('connected_at', 0)).strftime('%d/%m/%Y %H:%M')}"
         )
         info.setTextFormat(Qt.TextFormat.RichText)
-        info.setStyleSheet("font-size: 12.5px; color: #E7E9EE;")
+        info.setStyleSheet(f"font-size: 12.5px; color: {theme.TEXT_PRIMARY};")
         row.addWidget(info, stretch=1)
 
         disconnect = QPushButton("Desconectar")
@@ -314,14 +314,14 @@ class AccountTab(QWidget):
     def _build_provider_section(self, provider_key: str) -> QWidget:
         provider = auth.PROVIDERS[provider_key]
         box = QFrame()
-        box.setStyleSheet("QFrame { border: 1px solid #2D313B; border-radius: 8px; }")
+        box.setStyleSheet(f"QFrame {{ border: 1px solid {theme.BORDER}; border-radius: 8px; }}")
         layout = QVBoxLayout(box)
         layout.setContentsMargins(14, 12, 14, 12)
         layout.setSpacing(6)
 
         header_row = QHBoxLayout()
         title = QLabel(provider.label)
-        title.setStyleSheet("font-size: 13px; font-weight: 700; color: #E7E9EE;")
+        title.setStyleSheet(f"font-size: 13px; font-weight: 700; color: {theme.TEXT_PRIMARY};")
         header_row.addWidget(title)
         header_row.addStretch(1)
 

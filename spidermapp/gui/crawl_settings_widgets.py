@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 )
 
 from spidermapp.core.app_settings import DEFAULT_USER_AGENT
+from spidermapp.gui import theme
 
 # Shared building blocks for the "Rastreo" / "Límites" / "Avanzado" tabs in
 # SettingsDialog (Archivo → Preferencias) — every crawl option lives there
@@ -30,7 +31,7 @@ USER_AGENT_PRESETS = {
 def hint(text: str) -> QLabel:
     label = QLabel(text)
     label.setWordWrap(True)
-    label.setStyleSheet("font-size: 11px; color: #9AA1AE; margin-bottom: 4px;")
+    label.setStyleSheet(f"font-size: 11px; color: {theme.TEXT_MUTED}; margin-bottom: 4px;")
     return label
 
 

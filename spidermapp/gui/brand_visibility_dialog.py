@@ -91,14 +91,14 @@ class BrandVisibilityWorker(QThread):
 
 def _section_header(text: str) -> QLabel:
     label = QLabel(text)
-    label.setStyleSheet("font-size: 13px; font-weight: 700; color: #E7E9EE; margin-top: 6px;")
+    label.setStyleSheet(f"font-size: 13px; font-weight: 700; color: {theme.TEXT_PRIMARY}; margin-top: 6px;")
     return label
 
 
 def _hint(text: str) -> QLabel:
     label = QLabel(text)
     label.setWordWrap(True)
-    label.setStyleSheet("font-size: 11px; color: #9AA1AE;")
+    label.setStyleSheet(f"font-size: 11px; color: {theme.TEXT_MUTED};")
     return label
 
 
@@ -229,7 +229,7 @@ class BrandVisibilityDialog(QDialog):
 
         rule = QFrame()
         rule.setFrameShape(QFrame.Shape.HLine)
-        rule.setStyleSheet("color: #2D313B; margin: 8px 0;")
+        rule.setStyleSheet(f"color: {theme.BORDER}; margin: 8px 0;")
         layout.addWidget(rule)
 
     def _add_competitor_row(self) -> None:
@@ -306,7 +306,7 @@ class BrandVisibilityDialog(QDialog):
         self.generate_battery_button.clicked.connect(self._generate_battery)
         battery_row.addWidget(self.generate_battery_button)
         self.battery_status = QLabel("")
-        self.battery_status.setStyleSheet("font-size: 11.5px; color: #9AA1AE;")
+        self.battery_status.setStyleSheet(f"font-size: 11.5px; color: {theme.TEXT_MUTED};")
         battery_row.addWidget(self.battery_status, stretch=1)
         layout.addLayout(battery_row)
 
@@ -324,7 +324,7 @@ class BrandVisibilityDialog(QDialog):
 
         rule = QFrame()
         rule.setFrameShape(QFrame.Shape.HLine)
-        rule.setStyleSheet("color: #2D313B; margin: 8px 0;")
+        rule.setStyleSheet(f"color: {theme.BORDER}; margin: 8px 0;")
         layout.addWidget(rule)
 
     def _generate_battery(self) -> None:
@@ -383,12 +383,12 @@ class BrandVisibilityDialog(QDialog):
 
         self.run_status = QLabel("")
         self.run_status.setWordWrap(True)
-        self.run_status.setStyleSheet("font-size: 11.5px; color: #9AA1AE;")
+        self.run_status.setStyleSheet(f"font-size: 11.5px; color: {theme.TEXT_MUTED};")
         layout.addWidget(self.run_status)
 
         rule = QFrame()
         rule.setFrameShape(QFrame.Shape.HLine)
-        rule.setStyleSheet("color: #2D313B; margin: 8px 0;")
+        rule.setStyleSheet(f"color: {theme.BORDER}; margin: 8px 0;")
         layout.addWidget(rule)
 
     def _update_run_estimate(self) -> None:

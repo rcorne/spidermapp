@@ -141,7 +141,7 @@ class SiteMapCanvas(QWidget):
         center = QPointF(self.width() / 2, self.height() / 2)
 
         if not self._nodes:
-            painter.setPen(QColor("#7D8590"))
+            painter.setPen(QColor(f"{theme.TEXT_FAINT}"))
             painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, "Sin datos para mostrar todavía.")
             return
 
@@ -178,17 +178,17 @@ class SiteMapCanvas(QWidget):
                 painter.setPen(pen)
             else:
                 painter.setBrush(color)
-                painter.setPen(QPen(QColor("#1C1F26"), 1.4))
+                painter.setPen(QPen(QColor(f"{theme.BG_ELEVATED}"), 1.4))
             painter.drawEllipse(pos, node.radius, node.radius)
 
         seed_node = next((n for n in self._nodes.values() if n.page.depth == 0 and not n.orphan), None)
         if seed_node is not None:
-            painter.setPen(QColor("#E7E9EE"))
+            painter.setPen(QColor(f"{theme.TEXT_PRIMARY}"))
             label_pos = center + QPointF(seed_node.x, seed_node.y - seed_node.radius - 8)
             painter.drawText(QRectF(label_pos.x() - 60, label_pos.y() - 14, 120, 14), Qt.AlignmentFlag.AlignCenter, "Inicio")
 
         if self._truncated:
-            painter.setPen(QColor("#7D8590"))
+            painter.setPen(QColor(f"{theme.TEXT_FAINT}"))
             painter.drawText(10, self.height() - 10, f"Mostrando los primeros {MAX_RENDERED_NODES} nodos.")
 
     def mouseReleaseEvent(self, event) -> None:  # noqa: N802
@@ -219,8 +219,8 @@ class SiteMapTab(QWidget):
         legend.setTextFormat(Qt.TextFormat.RichText)
         legend.setWordWrap(True)
         legend.setStyleSheet(
-            f"padding: 8px 14px; font-size: 11.5px; color: #C3C7D1; background: #20232B; "
-            f"border-bottom: 1px solid #2D313B;"
+            f"padding: 8px 14px; font-size: 11.5px; color: {theme.TEXT_SECONDARY}; background: {theme.BG_SOFT}; "
+            f"border-bottom: 1px solid {theme.BORDER};"
         )
         layout.addWidget(legend)
 

@@ -41,7 +41,7 @@ class NewsCard(QFrame):
         self._link = item.link
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setStyleSheet(
-            "NewsCard { background: #1C1F26; border: 1px solid #2D313B; border-radius: 8px; }"
+            f"NewsCard {{ background: {theme.BG_ELEVATED}; border: 1px solid {theme.BORDER}; border-radius: 8px; }}"
             "NewsCard:hover { border-color: " + theme.PRIMARY + "; }"
         )
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
@@ -63,20 +63,20 @@ class NewsCard(QFrame):
         source_row.addWidget(icon_label)
 
         source_label = QLabel(item.source or "Google Noticias")
-        source_label.setStyleSheet("font-size: 11px; font-weight: 700; color: #9AA1AE;")
+        source_label.setStyleSheet(f"font-size: 11px; font-weight: 700; color: {theme.TEXT_MUTED};")
         source_row.addWidget(source_label, stretch=1)
         layout.addLayout(source_row)
 
         title_label = QLabel(item.title)
         title_label.setWordWrap(True)
-        title_label.setStyleSheet("font-size: 13.5px; font-weight: 600; color: #E7E9EE;")
+        title_label.setStyleSheet(f"font-size: 13.5px; font-weight: 600; color: {theme.TEXT_PRIMARY};")
         title_label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         layout.addWidget(title_label, stretch=1)
 
         when = seo_news.relative_time(item.published_at)
         if when:
             time_label = QLabel(when)
-            time_label.setStyleSheet("font-size: 10.5px; color: #7D8590;")
+            time_label.setStyleSheet(f"font-size: 10.5px; color: {theme.TEXT_FAINT};")
             layout.addWidget(time_label)
 
     def mousePressEvent(self, event) -> None:  # noqa: N802 - Qt override
@@ -112,7 +112,7 @@ class NewsTicker(QWidget):
         outer.addLayout(self.cards_row, stretch=1)
 
         self.status_label = QLabel("Cargando noticias…")
-        self.status_label.setStyleSheet("font-size: 11.5px; color: #9AA1AE;")
+        self.status_label.setStyleSheet(f"font-size: 11.5px; color: {theme.TEXT_MUTED};")
         outer.addWidget(self.status_label)
         self._render_cards([])  # empty placeholders while the first fetch is in flight
 
@@ -173,7 +173,7 @@ class NewsTicker(QWidget):
         for slot in slots:
             if slot is None:
                 placeholder = QFrame()
-                placeholder.setStyleSheet("background: #1C1F26; border: 1px dashed #2D313B; border-radius: 8px;")
+                placeholder.setStyleSheet(f"background: {theme.BG_ELEVATED}; border: 1px dashed {theme.BORDER}; border-radius: 8px;")
                 placeholder.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
                 self.cards_row.addWidget(placeholder, stretch=1)
             else:

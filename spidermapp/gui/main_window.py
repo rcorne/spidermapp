@@ -27,7 +27,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from spidermapp.core import app_settings, export, history, pdf_report, pptx_report, reports
+from spidermapp.core import app_settings, backend_client, export, history, pdf_report, pptx_report, reports
 from spidermapp.core.models import CrawlConfig, CrawlResult, IssueCategory, PageResult
 from spidermapp.gui import paths, theme
 from spidermapp.gui.about_dialog import AboutDialog
@@ -83,6 +83,7 @@ class MainWindow(QMainWindow):
         self.proxy_model.setSourceModel(self.table_model)
 
         self._build_ui()
+        self._refresh_login_button()
         QApplication.instance().aboutToQuit.connect(self._cleanup_before_quit)
 
     def _build_ui(self) -> None:
@@ -95,7 +96,7 @@ class MainWindow(QMainWindow):
         root_layout.setSpacing(0)
 
         toolbar_container = QWidget()
-        toolbar_container.setStyleSheet("background: #1C1F26; border-bottom: 1px solid #2D313B;")
+        toolbar_container.setStyleSheet(f"background: {theme.BG_ELEVATED}; border-bottom: 1px solid {theme.BORDER};")
         toolbar_container.setLayout(self._build_toolbar())
         root_layout.addWidget(toolbar_container)
 
@@ -267,7 +268,7 @@ class MainWindow(QMainWindow):
 
     def _build_progress_row(self) -> QWidget:
         container = QWidget()
-        container.setStyleSheet("background: #20232B; border-bottom: 1px solid #2D313B;")
+        container.setStyleSheet(f"background: {theme.BG_SOFT}; border-bottom: 1px solid {theme.BORDER};")
         row = QHBoxLayout(container)
         row.setContentsMargins(12, 4, 12, 4)
         row.setSpacing(10)
@@ -279,13 +280,13 @@ class MainWindow(QMainWindow):
         self.progress_bar.setFormat("%v de %m páginas")
         self.progress_bar.setFixedHeight(14)
         self.progress_bar.setStyleSheet(
-            f"QProgressBar {{ border: 1px solid #2D313B; border-radius: 7px; background: #20232B; font-size: 10px; }}"
+            f"QProgressBar {{ border: 1px solid {theme.BORDER}; border-radius: 7px; background: {theme.BG_SOFT}; font-size: 10px; }}"
             f"QProgressBar::chunk {{ background-color: {theme.PRIMARY}; border-radius: 7px; }}"
         )
         row.addWidget(self.progress_bar, stretch=1)
 
         self.phase_label = QLabel("Listo.")
-        self.phase_label.setStyleSheet("color: #9AA1AE; font-size: 11px;")
+        self.phase_label.setStyleSheet(f"color: {theme.TEXT_MUTED}; font-size: 11px;")
         # Never let a long URL in the label dictate the window's minimum width
         self.phase_label.setSizePolicy(QSizePolicy.Policy.Ignored, QSizePolicy.Policy.Preferred)
         self.phase_label.setMinimumWidth(120)
@@ -353,6 +354,12 @@ class MainWindow(QMainWindow):
         self.stop_button.setEnabled(False)
         self.stop_button.clicked.connect(self._stop_crawl)
         row1.addWidget(self.stop_button)
+
+        self.login_button = QPushButton("Iniciar sesión")
+        self.login_button.setStyleSheet(theme.BUTTON_SECONDARY_QSS)
+        self.login_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.login_button.clicked.connect(lambda: self._open_settings_dialog(initial_tab="Cuenta"))
+        row1.addWidget(self.login_button)
         outer.addLayout(row1)
 
         row2 = QHBoxLayout()
@@ -692,11 +699,20 @@ class MainWindow(QMainWindow):
             "max_links_per_page": settings.default_max_links_per_page,
         }
 
-    def _open_settings_dialog(self) -> None:
-        dialog = SettingsDialog(self)
+    def _refresh_login_button(self) -> None:
+        session = backend_client.load_pidge_session()
+        if session is None:
+            self.login_button.setText("Iniciar sesión")
+        else:
+            self.login_button.setText(session.user.display_name or session.user.email)
+
+    def _open_settings_dialog(self, initial_tab: str | None = None) -> None:
+        dialog = SettingsDialog(self, initial_tab=initial_tab)
         if not dialog.exec():
+            self._refresh_login_button()
             return
         self.statusBar().showMessage("Preferencias guardadas.")
+        self._refresh_login_button()
 
         settings = app_settings.load_settings()
         self.max_pages_input.setValue(settings.default_max_pages)

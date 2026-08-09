@@ -37,6 +37,10 @@ class AppSettings:
     # pidge_server — the backend for accounts + chat. Defaults to a local
     # instance; point it at wherever the team actually deploys the server.
     backend_url: str = "http://127.0.0.1:8000"
+    # "dark" (Teams-style rail) or "light" (SEMrush/HubSpot-style SaaS
+    # dashboard) — applied at startup; switching requires a restart since
+    # widgets read theme.* colors once, at construction time.
+    theme: str = "dark"
 
 
 def load_settings(path: Path = SETTINGS_PATH) -> AppSettings:

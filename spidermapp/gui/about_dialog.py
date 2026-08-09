@@ -16,6 +16,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from spidermapp.gui import theme
+
 APP_VERSION = "0.2.0"
 GITHUB_REPO = "rcorne/spidermapp"
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}"
@@ -84,20 +86,20 @@ class AboutDialog(QDialog):
         title_box = QVBoxLayout()
         title_box.setSpacing(2)
         name = QLabel("Pidge")
-        name.setStyleSheet("font-size: 19px; font-weight: 700; color: #E7E9EE;")
+        name.setStyleSheet(f"font-size: 19px; font-weight: 700; color: {theme.TEXT_PRIMARY};")
         title_box.addWidget(name)
         version = QLabel(f"Versión {APP_VERSION}")
-        version.setStyleSheet("font-size: 12px; color: #9AA1AE;")
+        version.setStyleSheet(f"font-size: 12px; color: {theme.TEXT_MUTED};")
         title_box.addWidget(version)
         tagline = QLabel("Auditor de SEO de escritorio")
-        tagline.setStyleSheet("font-size: 12px; color: #9AA1AE;")
+        tagline.setStyleSheet(f"font-size: 12px; color: {theme.TEXT_MUTED};")
         title_box.addWidget(tagline)
         header.addLayout(title_box, stretch=1)
         outer.addLayout(header)
 
         rule1 = QFrame()
         rule1.setFrameShape(QFrame.Shape.HLine)
-        rule1.setStyleSheet("color: #2D313B;")
+        rule1.setStyleSheet(f"color: {theme.BORDER};")
         outer.addWidget(rule1)
 
         info = QLabel(
@@ -107,23 +109,23 @@ class AboutDialog(QDialog):
         )
         info.setTextFormat(Qt.TextFormat.RichText)
         info.setOpenExternalLinks(True)
-        info.setStyleSheet("font-size: 12.5px; color: #C3C7D1;")
+        info.setStyleSheet(f"font-size: 12.5px; color: {theme.TEXT_SECONDARY};")
         outer.addWidget(info)
 
         rule2 = QFrame()
         rule2.setFrameShape(QFrame.Shape.HLine)
-        rule2.setStyleSheet("color: #2D313B;")
+        rule2.setStyleSheet(f"color: {theme.BORDER};")
         outer.addWidget(rule2)
 
         github_header = QLabel("Datos de GitHub")
-        github_header.setStyleSheet("font-size: 12px; font-weight: 700; color: #C3C7D1;")
+        github_header.setStyleSheet(f"font-size: 12px; font-weight: 700; color: {theme.TEXT_SECONDARY};")
         outer.addWidget(github_header)
 
         self.github_status = QLabel("Consultando GitHub…")
         self.github_status.setWordWrap(True)
         self.github_status.setTextFormat(Qt.TextFormat.RichText)
         self.github_status.setOpenExternalLinks(True)
-        self.github_status.setStyleSheet("font-size: 12px; color: #9AA1AE;")
+        self.github_status.setStyleSheet(f"font-size: 12px; color: {theme.TEXT_MUTED};")
         outer.addWidget(self.github_status)
 
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)

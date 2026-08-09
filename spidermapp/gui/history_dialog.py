@@ -32,7 +32,7 @@ class HistoryDialog(QDialog):
         layout = QVBoxLayout(self)
 
         hint = QLabel("Selecciona un crawl y ábrelo, o selecciona dos (Cmd+clic) para compararlos.")
-        hint.setStyleSheet("color: #C3C7D1; font-size: 12px;")
+        hint.setStyleSheet(f"color: {theme.TEXT_SECONDARY}; font-size: 12px;")
         layout.addWidget(hint)
 
         content_row = QHBoxLayout()

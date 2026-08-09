@@ -89,15 +89,49 @@ mientras el servidor esté corriendo en esa misma Mac, crear cuenta/iniciar sesi
 igual que cualquier app cliente-servidor.
 
 **Para que varias personas lo usen de verdad** (no solo en una Mac) hay que desplegar
-`pidge_server/` en algún lugar accesible por todos — un VPS propio, o un servicio como Railway,
-Render o Fly.io — y apuntar el campo "Servidor" de cada instalación de Pidge a esa URL. Esa parte
-requiere que tú mismo crees la cuenta de hosting (no puedo crearla ni pagarla en tu nombre); incluye
-[`pidge_server/Dockerfile`](pidge_server/Dockerfile) para facilitarlo. Configura al menos
-`PIDGE_JWT_SECRET` (un secreto real, no el valor de desarrollo) vía variables de entorno en producción.
+`pidge_server/` en algún lugar accesible por todos, y apuntar el campo "Servidor" (Preferencias →
+Cuenta) de cada instalación de Pidge a esa URL.
+
+### Por qué no en el hosting compartido de GoDaddy
+
+El hosting compartido/cPanel típico de GoDaddy (el que usa la mayoría de los sitios web
+tradicionales) **no puede correr `pidge_server`**: está pensado para PHP servido por Apache, sin
+acceso para dejar un proceso Python corriendo de forma persistente (`uvicorn`), sin soporte real
+de WebSockets (lo que necesita el chat en tiempo real), y sin acceso root/Docker. No es un
+límite de la app — es una limitación real de ese tipo de hosting, y forzarlo no va a funcionar.
+
+**Lo que sí funciona** — mantener el dominio en GoDaddy (para eso sirve bien) y correr
+`pidge_server` en un servicio pensado para procesos Python persistentes. La opción más simple es
+**Railway**:
+
+1. Crea una cuenta en [railway.app](https://railway.app) (con tu email o GitHub) — esto lo tienes
+   que hacer tú, no puedo crear cuentas ni pagar servicios en tu nombre.
+2. "New Project" → "Deploy from GitHub repo" → selecciona `rcorne/spidermapp`. Railway detecta el
+   `pidge_server/Dockerfile` automáticamente si le indicas ese subdirectorio como raíz de build
+   (Settings → Build → Root Directory: `pidge_server`, Dockerfile Path: `Dockerfile`).
+3. En Variables del servicio, agrega al menos `PIDGE_JWT_SECRET` con un valor largo y aleatorio
+   (no el de desarrollo) — es lo que firma las sesiones; si se filtra, cualquiera puede falsificar
+   un login.
+4. Agrega un Volume (Railway → tu servicio → Volumes) montado en `/data` para que la base SQLite
+   (`~/.pidge_server/pidge.db` dentro del contenedor, controlado por `PIDGE_DATA_DIR=/data`, ya
+   seteado en el Dockerfile) sobreviva a los redeploys. Para más de un puñado de usuarios
+   conviene migrar a Postgres (Railway lo ofrece como addon con un clic) — avísame si llegan a
+   ese punto y adapto `pidge_server/db.py`.
+5. Railway te da una URL pública (`algo.up.railway.app`) con HTTPS automático. Puedes usarla tal
+   cual, o darle un subdominio propio: en GoDaddy → DNS de tu dominio, agrega un registro CNAME
+   (ej. `api` → el dominio que te da Railway) y en Railway agrega ese dominio custom al servicio.
+6. En cada instalación de Pidge: Preferencias → Cuenta → Servidor Pidge → pega esa URL (con
+   `https://`) → Guardar.
+
+Render y Fly.io son alternativas equivalentes si prefieres explorarlas — mismo principio: un
+servicio que corre contenedores Docker con procesos persistentes y WebSockets, no hosting
+compartido de archivos.
 
 Inicio de sesión con Google/GitHub/Apple sigue el mismo flujo OAuth PKCE descrito en
-[`spidermapp/core/auth.py`](spidermapp/core/auth.py) — necesitas tus propias credenciales de cada
-proveedor (Preferencias → Cuenta), el mismo requisito que ya aplicaba antes del chat.
+[`spidermapp/core/auth.py`](spidermapp/core/auth.py) — corre en la app de escritorio misma
+(no en el servidor), así que no depende de dónde despliegues `pidge_server`; sigues necesitando
+tus propias credenciales de cada proveedor (Preferencias → Cuenta), el mismo requisito que ya
+aplicaba antes del chat.
 
 ## Tests
 
