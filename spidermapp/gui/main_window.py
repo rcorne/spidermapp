@@ -437,7 +437,8 @@ class MainWindow(QMainWindow):
             **self._crawl_advanced,
         )
 
-        self._worker = CrawlWorker(config)
+        prevent_sleep = app_settings.load_settings().default_prevent_sleep
+        self._worker = CrawlWorker(config, prevent_sleep=prevent_sleep)
         self._worker.page_found.connect(self._on_page_found)
         self._worker.progress.connect(self._on_progress)
         self._worker.status_changed.connect(self._on_status_changed)

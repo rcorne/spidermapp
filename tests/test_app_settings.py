@@ -7,6 +7,7 @@ def test_load_settings_missing_file_returns_defaults(tmp_path):
     assert settings.default_max_depth == 10
     assert settings.default_concurrency == 8
     assert settings.default_render_js is False
+    assert settings.default_prevent_sleep is True
 
 
 def test_save_and_load_roundtrip(tmp_path):

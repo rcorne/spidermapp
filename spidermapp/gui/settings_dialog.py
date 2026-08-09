@@ -94,6 +94,15 @@ class SettingsDialog(QDialog):
         self.render_js_checkbox.setChecked(settings.default_render_js)
         form.addRow("", self.render_js_checkbox)
 
+        self.prevent_sleep_checkbox = QCheckBox("Evitar que la Mac se suspenda mientras rastrea")
+        self.prevent_sleep_checkbox.setChecked(settings.default_prevent_sleep)
+        form.addRow("", self.prevent_sleep_checkbox)
+        layout.addWidget(hint(
+            "Si el equipo se suspende (por inactividad o al cerrar la tapa), el rastreo también se "
+            "pausa — es una limitación del sistema operativo, no de la app. Con esta opción activa, "
+            "Spidermapp le pide a macOS que no suspenda el equipo mientras un rastreo está en curso."
+        ))
+
         layout.addStretch(1)
         return widget
 
@@ -320,6 +329,8 @@ class SettingsDialog(QDialog):
                 default_follow_nofollow=self.follow_nofollow_check.isChecked(),
                 default_max_query_params=self.max_query_params_spin.value(),
                 default_max_links_per_page=self.max_links_per_page_spin.value(),
+                default_prevent_sleep=self.prevent_sleep_checkbox.isChecked(),
+                backend_url=app_settings.load_settings().backend_url,
             )
         )
         config = {key: field.text().strip() for key, field in self._connector_fields.items() if field.text().strip()}

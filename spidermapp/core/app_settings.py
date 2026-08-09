@@ -29,6 +29,11 @@ class AppSettings:
     default_follow_nofollow: bool = True
     default_max_query_params: int = 0
     default_max_links_per_page: int = 0
+    # macOS suspends every process, including this one, when the machine
+    # sleeps — there's no way around that from inside the app. What we CAN
+    # do is ask the OS not to sleep while a crawl is running (via
+    # `caffeinate`), so a laptop lid closing mid-crawl doesn't pause it.
+    default_prevent_sleep: bool = True
     # pidge_server — the backend for accounts + chat. Defaults to a local
     # instance; point it at wherever the team actually deploys the server.
     backend_url: str = "http://127.0.0.1:8000"

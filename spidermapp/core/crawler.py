@@ -91,6 +91,11 @@ class Crawler:
         # timestamp instead of piling on more requests while it's telling
         # us to slow down.
         self._backoff_until = 0.0
+        # Set once the sitemap is read, before any page is fetched — lets
+        # the progress bar start at an honest estimate of the site's size
+        # instead of just the "máx. páginas" ceiling, and grow past it if
+        # the crawl turns up URLs the sitemap never listed.
+        self._sitemap_total = 0
         self._backoff_notified_at = 0.0
         self._on_status: OnStatus | None = None
         self._exclude_regexes: list[re.Pattern] = []
@@ -132,6 +137,16 @@ class Crawler:
 
     async def _status(self, message: str) -> None:
         await _maybe_await(self._on_status, message)
+
+    def _estimated_total(self) -> int:
+        """Best current guess at how many pages this crawl will touch:
+        starts from the sitemap's URL count (known before the first page
+        is even fetched), grows as the crawl discovers URLs the sitemap
+        never listed, and never exceeds the user's "máx. páginas" ceiling.
+        Falls back to the páginas ceiling itself when there's no sitemap
+        to estimate from, matching the old behavior."""
+        baseline = self._sitemap_total if self._sitemap_total else self.config.max_pages
+        return min(self.config.max_pages, max(baseline, len(self.visited)))
 
     async def _wait_for_backoff(self) -> None:
         now = time.monotonic()
@@ -230,6 +245,10 @@ class Crawler:
             await self._status("Leyendo sitemap.xml…")
             sitemap_urls = await self._collect_sitemap_urls(client, robots_info)
             result.sitemap_urls = sitemap_urls
+            self._sitemap_total = len(sitemap_urls)
+            if sitemap_urls:
+                await self._status(f"Sitemap: {len(sitemap_urls)} URLs encontradas.")
+            await _maybe_await(on_progress, 0, self._estimated_total())
 
             if self.config.render_js:
                 await self._status("Iniciando navegador para renderizado JS…")
@@ -278,7 +297,7 @@ class Crawler:
                     for page, discovered in processed:
                         self.pages.append(page)
                         await _maybe_await(on_page, page)
-                        await _maybe_await(on_progress, len(self.pages), self.config.max_pages)
+                        await _maybe_await(on_progress, len(self.pages), self._estimated_total())
 
                         for link_url, depth in discovered:
                             self.inlinks.setdefault(link_url, set()).add(page.final_url or page.url)
@@ -454,7 +473,7 @@ class Crawler:
             )
             self.pages.append(page)
             await _maybe_await(on_page, page)
-            await _maybe_await(on_progress, len(self.pages), self.config.max_pages)
+            await _maybe_await(on_progress, len(self.pages), self._estimated_total())
 
     async def _start_browser(self) -> None:
         from playwright.async_api import async_playwright

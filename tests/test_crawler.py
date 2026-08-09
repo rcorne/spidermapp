@@ -430,6 +430,56 @@ async def test_crawl_detects_orphan_pages_from_sitemap(monkeypatch):
     assert not non_orphan.is_orphan
 
 
+async def test_crawl_progress_total_starts_from_sitemap_and_grows_with_discoveries(monkeypatch):
+    """The progress bar's denominator should reflect the sitemap's URL
+    count as soon as it's known (before any page is fetched), then grow
+    past it if the crawl discovers real URLs the sitemap never listed —
+    it should never just track the "máx. páginas" ceiling."""
+    sitemap_xml = """<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://example.test/</loc></url>
+  <url><loc>https://example.test/about</loc></url>
+</urlset>"""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = request.url
+        if url.path == "/robots.txt":
+            return httpx.Response(
+                200, content="Sitemap: https://example.test/sitemap.xml\n", headers={"content-type": "text/plain"}
+            )
+        if url.path == "/sitemap.xml":
+            return httpx.Response(200, content=sitemap_xml, headers={"content-type": "application/xml"})
+        if url.path == "/":
+            return httpx.Response(200, content=PAGE_HOME, headers={"content-type": "text/html"})
+        if url.path == "/about":
+            return httpx.Response(200, content=PAGE_ABOUT, headers={"content-type": "text/html"})
+        if url.path == "/contact":
+            return httpx.Response(200, content=PAGE_CONTACT, headers={"content-type": "text/html"})
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+
+    def patched_client(*args, **kwargs):
+        kwargs["transport"] = transport
+        return _REAL_ASYNC_CLIENT(*args, **kwargs)
+
+    monkeypatch.setattr(crawler_mod.httpx, "AsyncClient", patched_client)
+
+    progress_calls: list[tuple[int, int]] = []
+    config = CrawlConfig(seed_url="https://example.test/", max_pages=50)
+    result = await crawler_mod.crawl(config, on_progress=lambda done, total: progress_calls.append((done, total)))
+
+    assert progress_calls[0] == (0, 2)  # sitemap has 2 URLs, known before any fetch
+    # PAGE_HOME links to /about (in the sitemap) and /contact (not in it);
+    # once /contact is discovered the total should grow past the sitemap.
+    assert progress_calls[-1][1] >= 3
+    assert {p.url for p in result.pages} >= {
+        "https://example.test/",
+        "https://example.test/about",
+        "https://example.test/contact",
+    }
+
+
 async def test_crawl_auto_renders_when_raw_html_has_no_links(monkeypatch):
     """Point-11 regression: user enters an SPA URL WITHOUT checking
     "Renderizar JS" — the crawler must notice the raw HTML has zero links,
