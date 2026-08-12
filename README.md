@@ -60,11 +60,28 @@ compilación cruzada: desde un Mac no se puede generar un `.exe` de Windows. Por
 de Windows lo construye GitHub Actions en un runner `windows-latest`, no la máquina local.
 
 El workflow está en [`.github/workflows/build.yml`](.github/workflows/build.yml) y corre solo
-en cada push a `main`. Para bajar el resultado:
+en cada push a `main`. Produce dos formatos para Windows:
+
+- **`Pidge-Setup-2.0.0.exe`** — el instalador. Instala en Archivos de programa, crea accesos
+  directos en el menú Inicio (y opcionalmente en el escritorio) y registra un desinstalador en
+  "Aplicaciones y características". Es lo que se le entrega a alguien más.
+- **`Pidge-windows-portable.zip`** — la carpeta cruda con `Pidge.exe` dentro, para correrlo sin
+  instalar nada.
+
+El instalador se arma con [Inno Setup](https://jrsoftware.org/isinfo.php) a partir de
+[`packaging/windows/pidge.iss`](packaging/windows/pidge.iss). Igual que el `.exe`, **solo se
+puede compilar en Windows** — de ahí que lo haga el runner y no la máquina local.
+
+Para bajar el resultado:
 
 1. Ve a la pestaña **Actions** del repo en GitHub.
 2. Abre la ejecución más reciente de "Build Pidge".
-3. Descarga el artefacto **Pidge-windows** (un `.zip`) o **Pidge-macos** (el `.dmg`).
+3. Descarga **Pidge-windows-installer**, **Pidge-windows-portable** o **Pidge-macos**.
+
+Windows va a mostrar una advertencia de SmartScreen la primera vez que se ejecute el
+instalador ("Windows protegió tu PC" → *Más información* → *Ejecutar de todas formas*). Es
+normal en instaladores sin firma digital: eliminarla requiere un certificado de firma de código
+(unos USD 200–400 al año, a nombre tuyo o de tu empresa), que es un trámite aparte.
 
 Al publicar un tag de versión (`git tag v2.0.0 && git push --tags`) el workflow además adjunta
 ambos instaladores al release de GitHub automáticamente.
