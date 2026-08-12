@@ -62,6 +62,15 @@ def _no_real_tls(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _isolated_checkpoints(tmp_path, monkeypatch):
+    """Crawls checkpoint to disk now, so point that at a tmp dir — otherwise
+    a test that stops early leaves files in the developer's real
+    ~/.spidermapp/checkpoints, and a stale one there could even get resumed
+    into a later test."""
+    monkeypatch.setattr(crawler_mod.checkpoint_mod, "CHECKPOINT_DIR", tmp_path / "checkpoints")
+
+
+@pytest.fixture(autouse=True)
 def _mock_transport(monkeypatch):
     transport = httpx.MockTransport(_handler)
 
@@ -541,3 +550,203 @@ async def test_crawl_auto_renders_when_raw_html_has_no_links(monkeypatch):
     assert "https://spa.test/categoria-1" in urls
     assert "https://spa.test/categoria-2" in urls
     assert len(result.pages) >= 3
+
+
+# --- Pidge 2.0: checkpoint / pause / images / classified errors -------------
+
+
+async def test_finished_crawl_leaves_no_checkpoint_to_resume(tmp_path, monkeypatch):
+    """A crawl that ran to completion has nothing pending, so it must not
+    leave a checkpoint behind offering a pointless "retomar"."""
+    checkpoint_dir = tmp_path / "cp"
+    monkeypatch.setattr(crawler_mod.checkpoint_mod, "CHECKPOINT_DIR", checkpoint_dir)
+
+    config = CrawlConfig(seed_url="https://example.test/", max_pages=50)
+    await crawler_mod.crawl(config)
+
+    assert crawler_mod.checkpoint_mod.load("https://example.test/", checkpoint_dir) is None
+
+
+async def test_stopped_crawl_keeps_a_resumable_checkpoint(tmp_path, monkeypatch):
+    checkpoint_dir = tmp_path / "cp"
+    monkeypatch.setattr(crawler_mod.checkpoint_mod, "CHECKPOINT_DIR", checkpoint_dir)
+
+    # Stop right after the first batch, so URLs remain queued.
+    calls = {"n": 0}
+
+    def stop_after_first_batch() -> bool:
+        calls["n"] += 1
+        return calls["n"] > 1
+
+    config = CrawlConfig(seed_url="https://example.test/", max_pages=50)
+    result = await crawler_mod.crawl(config, stop_flag=stop_after_first_batch)
+
+    assert result.stopped_early
+    saved = crawler_mod.checkpoint_mod.load("https://example.test/", checkpoint_dir)
+    assert saved is not None
+    assert saved.is_resumable
+    assert saved.frontier, "the pending queue should have been persisted"
+
+
+async def test_resume_skips_already_visited_urls(tmp_path, monkeypatch):
+    """The whole point of resuming: pages fetched in the first run must not
+    be fetched again in the second."""
+    checkpoint_dir = tmp_path / "cp"
+    monkeypatch.setattr(crawler_mod.checkpoint_mod, "CHECKPOINT_DIR", checkpoint_dir)
+
+    crawler_mod.checkpoint_mod.save(
+        crawler_mod.checkpoint_mod.CrawlCheckpoint(
+            seed_url="https://example.test/",
+            visited=["https://example.test/", "https://example.test/about"],
+            frontier=[("https://example.test/contact", 1)],
+            pages_done=2,
+        ),
+        checkpoint_dir,
+    )
+
+    config = CrawlConfig(seed_url="https://example.test/", max_pages=50)
+    result = await crawler_mod.crawl(config, resume=True)
+
+    assert result.resumed_from_checkpoint
+    fetched = {p.url for p in result.pages}
+    assert "https://example.test/contact" in fetched
+    assert "https://example.test/about" not in fetched, "already-visited URL was re-fetched"
+
+
+async def test_resume_without_checkpoint_starts_a_normal_crawl(tmp_path, monkeypatch):
+    monkeypatch.setattr(crawler_mod.checkpoint_mod, "CHECKPOINT_DIR", tmp_path / "cp")
+    config = CrawlConfig(seed_url="https://example.test/", max_pages=50)
+    result = await crawler_mod.crawl(config, resume=True)
+    assert not result.resumed_from_checkpoint
+    assert "https://example.test/" in {p.url for p in result.pages}
+
+
+async def test_checkpoints_can_be_disabled(tmp_path, monkeypatch):
+    checkpoint_dir = tmp_path / "cp"
+    monkeypatch.setattr(crawler_mod.checkpoint_mod, "CHECKPOINT_DIR", checkpoint_dir)
+
+    calls = {"n": 0}
+
+    def stop_after_first_batch() -> bool:
+        calls["n"] += 1
+        return calls["n"] > 1
+
+    config = CrawlConfig(seed_url="https://example.test/", max_pages=50, enable_checkpoints=False)
+    await crawler_mod.crawl(config, stop_flag=stop_after_first_batch)
+
+    assert crawler_mod.checkpoint_mod.load("https://example.test/", checkpoint_dir) is None
+
+
+async def test_pause_flag_holds_the_crawl_then_releases_it():
+    """Paused means paused: no new pages while the flag is up, and the crawl
+    finishes normally once it drops."""
+    paused = {"value": True}
+    pages_seen: list[str] = []
+
+    async def release_soon():
+        await asyncio.sleep(0.15)
+        paused["value"] = False
+
+    config = CrawlConfig(seed_url="https://example.test/", max_pages=50)
+    crawl_task = asyncio.create_task(
+        crawler_mod.crawl(
+            config,
+            on_page=lambda page: pages_seen.append(page.url),
+            pause_flag=lambda: paused["value"],
+        )
+    )
+    await asyncio.sleep(0.05)
+    paused_count = len(pages_seen)
+
+    await release_soon()
+    result = await crawl_task
+
+    assert paused_count == 0, "pages were crawled while paused"
+    assert len(result.pages) >= 3
+
+
+async def test_broken_images_are_detected_and_flagged(monkeypatch):
+    page_html = (
+        "<html><head><title>Página con imágenes rotas de prueba</title>"
+        '<meta name="description" content="Descripción suficientemente larga para pasar el check de la página."></head>'
+        '<body><h1>Hola</h1><img src="/ok.png" alt="ok"><img src="/roto.png" alt="roto"></body></html>'
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = request.url
+        if url.path in ("/robots.txt", "/sitemap.xml"):
+            return httpx.Response(404)
+        if url.path == "/ok.png":
+            return httpx.Response(200, headers={"content-type": "image/png"})
+        if url.path == "/roto.png":
+            return httpx.Response(404)
+        if url.path == "/":
+            return httpx.Response(200, content=page_html, headers={"content-type": "text/html"})
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+
+    def patched_client(*args, **kwargs):
+        kwargs["transport"] = transport
+        return _REAL_ASYNC_CLIENT(*args, **kwargs)
+
+    monkeypatch.setattr(crawler_mod.httpx, "AsyncClient", patched_client)
+
+    config = CrawlConfig(seed_url="https://example.test/", max_pages=5)
+    result = await crawler_mod.crawl(config)
+
+    home = next(p for p in result.pages if p.url == "https://example.test/")
+    assert home.broken_images == ["https://example.test/roto.png"]
+    assert any(i.code == "broken_image" for i in home.issues)
+
+
+async def test_image_checking_can_be_turned_off(monkeypatch):
+    requested: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested.append(request.url.path)
+        if request.url.path == "/":
+            return httpx.Response(
+                200,
+                content='<html><body><img src="/roto.png"></body></html>',
+                headers={"content-type": "text/html"},
+            )
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+
+    def patched_client(*args, **kwargs):
+        kwargs["transport"] = transport
+        return _REAL_ASYNC_CLIENT(*args, **kwargs)
+
+    monkeypatch.setattr(crawler_mod.httpx, "AsyncClient", patched_client)
+
+    config = CrawlConfig(seed_url="https://example.test/", max_pages=5, check_images=False)
+    result = await crawler_mod.crawl(config)
+
+    assert "/roto.png" not in requested
+    assert all(not p.broken_images for p in result.pages)
+
+
+async def test_unreachable_host_records_a_classified_error(monkeypatch):
+    """A failed fetch should say *why* it failed, so the recommendation can
+    name the actual fix."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectTimeout("timed out")
+
+    transport = httpx.MockTransport(handler)
+
+    def patched_client(*args, **kwargs):
+        kwargs["transport"] = transport
+        return _REAL_ASYNC_CLIENT(*args, **kwargs)
+
+    monkeypatch.setattr(crawler_mod.httpx, "AsyncClient", patched_client)
+    monkeypatch.setattr(crawler_mod.asyncio, "sleep", lambda *_a, **_k: asyncio.sleep(0))
+
+    config = CrawlConfig(seed_url="https://example.test/", max_pages=2, max_retries=0)
+    result = await crawler_mod.crawl(config)
+
+    seed = result.pages[0]
+    assert seed.error_type == "timeout"
+    assert any(i.code == "timeout" for i in seed.issues)

@@ -9,7 +9,9 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 from bs4 import BeautifulSoup
 
-from spidermapp.core import duplicates, html_analysis, issues as issues_mod, keywords, render_check, robots, security, sitemap, tech_detect, url_utils
+from spidermapp.core import checkpoint as checkpoint_mod
+from spidermapp.core import duplicates, fetch_errors, html_analysis, issues as issues_mod, keywords, render_check, robots, security, sitemap, tech_detect, url_utils
+from spidermapp.core.rate_limiter import RateLimiter
 from spidermapp.core.models import (
     CrawlConfig,
     CrawlResult,
@@ -25,9 +27,20 @@ OnPage = Callable[[PageResult], Union[Awaitable[None], None]]
 OnProgress = Callable[[int, int], Union[Awaitable[None], None]]
 OnStatus = Callable[[str], Union[Awaitable[None], None]]
 StopFlag = Callable[[], bool]
+PauseFlag = Callable[[], bool]
 
 MAX_REDIRECT_HOPS = 10
 SITEMAP_INDEX_MAX_CHILDREN = 20
+
+# How often to persist the frontier while crawling. Cheap enough to do often
+# (one small JSON write), and the interval bounds how much work a crash or a
+# sleep can cost.
+CHECKPOINT_EVERY_SECONDS = 10.0
+
+# Images are checked with HEAD in small batches so a page full of <img> tags
+# can't stall the crawl behind dozens of extra requests.
+IMAGE_CHECK_CONCURRENCY = 6
+MAX_IMAGES_CHECKED_PER_PAGE = 25
 
 _TLS_ERROR_MARKERS = ("ssl", "tls", "handshake")
 
@@ -97,6 +110,13 @@ class Crawler:
         # the crawl turns up URLs the sitemap never listed.
         self._sitemap_total = 0
         self._backoff_notified_at = 0.0
+        # Steady-state pacing (see core/rate_limiter.py). Disabled at 0,
+        # which is the default — most people crawl their own site and want
+        # it fast; the 429/503 backoff still protects sites that complain.
+        self.rate_limiter = RateLimiter(config.requests_per_second)
+        self._checkpoint_dir = checkpoint_mod.CHECKPOINT_DIR
+        self._last_checkpoint_at = 0.0
+        self._resumed_from_checkpoint = False
         self._on_status: OnStatus | None = None
         self._exclude_regexes: list[re.Pattern] = []
         for pattern in config.exclude_patterns:
@@ -148,6 +168,88 @@ class Crawler:
         baseline = self._sitemap_total if self._sitemap_total else self.config.max_pages
         return min(self.config.max_pages, max(baseline, len(self.visited)))
 
+    async def _find_broken_images(self, client: httpx.AsyncClient, image_urls: list[str]) -> list[str]:
+        """HEAD each image and report the ones that don't come back OK.
+
+        Uses HEAD (not GET) so a page of large photos costs headers rather
+        than megabytes, and caps both the count and the parallelism so an
+        image-heavy page can't monopolize the crawl."""
+        if not image_urls:
+            return []
+
+        candidates = image_urls[:MAX_IMAGES_CHECKED_PER_PAGE]
+        gate = asyncio.Semaphore(IMAGE_CHECK_CONCURRENCY)
+
+        async def check(url: str) -> Optional[str]:
+            async with gate:
+                await self.rate_limiter.acquire()
+                try:
+                    response = await client.head(url, follow_redirects=True)
+                    # Some CDNs reject HEAD but serve GET fine, so a 405 is
+                    # about the method, not a broken image.
+                    if response.status_code == 405:
+                        response = await client.get(url, follow_redirects=True)
+                except httpx.RequestError:
+                    return url
+                return url if response.status_code >= 400 else None
+
+        results = await asyncio.gather(*(check(url) for url in candidates))
+        return [url for url in results if url]
+
+    def _restore_frontier(self) -> list[tuple[str, int]]:
+        """Reload a previous run's pending queue, if one is still usable.
+        Returns an empty frontier (i.e. "start fresh") when there's no
+        checkpoint, it's finished, or it's too old to trust."""
+        saved = checkpoint_mod.load(self.config.seed_url, self._checkpoint_dir)
+        if saved is None or not saved.is_resumable:
+            return []
+        self.visited = set(saved.visited)
+        self._sitemap_total = saved.sitemap_total
+        return list(saved.frontier)
+
+    def _write_checkpoint(self, frontier: list[tuple[str, int]], force: bool = False) -> None:
+        """Persist the pending queue at most every CHECKPOINT_EVERY_SECONDS.
+        Best-effort by design: a crawl must never die because the disk was
+        full or the folder went read-only."""
+        if not self.config.enable_checkpoints:
+            return
+        now = time.monotonic()
+        if not force and (now - self._last_checkpoint_at) < CHECKPOINT_EVERY_SECONDS:
+            return
+        self._last_checkpoint_at = now
+        try:
+            checkpoint_mod.save(
+                checkpoint_mod.CrawlCheckpoint(
+                    seed_url=self.config.seed_url,
+                    visited=sorted(self.visited),
+                    frontier=list(frontier),
+                    pages_done=len(self.pages),
+                    sitemap_total=self._sitemap_total,
+                ),
+                self._checkpoint_dir,
+            )
+        except OSError:
+            pass
+
+    def _clear_checkpoint(self) -> None:
+        if not self.config.enable_checkpoints:
+            return
+        try:
+            checkpoint_mod.clear(self.config.seed_url, self._checkpoint_dir)
+        except OSError:
+            pass
+
+    async def _wait_while_paused(self, pause_flag: PauseFlag | None, frontier: list[tuple[str, int]]) -> None:
+        """Block here while the user has the crawl paused. Checkpointing on
+        entry means a pause is also a safe point to quit the app."""
+        if pause_flag is None or not pause_flag():
+            return
+        self._write_checkpoint(frontier, force=True)
+        await self._status("Rastreo en pausa.")
+        while pause_flag():
+            await asyncio.sleep(0.2)
+        await self._status("Reanudando rastreo…")
+
     async def _wait_for_backoff(self) -> None:
         now = time.monotonic()
         if now < self._backoff_until:
@@ -168,23 +270,29 @@ class Crawler:
 
     async def _fetch_with_redirect_chain(
         self, client: httpx.AsyncClient, url: str, max_hops: int = MAX_REDIRECT_HOPS
-    ) -> tuple[Optional[httpx.Response], list[tuple[str, int]], str]:
+    ) -> tuple[Optional[httpx.Response], list[tuple[str, int]], str, str]:
+        """Returns (response, redirect_chain, error_message, error_type).
+        error_type is classified where the exception is still in scope —
+        several _process_url tasks run concurrently, so stashing the
+        exception on self would let one worker read another's failure."""
         chain: list[tuple[str, int]] = []
         current = url
         for _ in range(max_hops):
-            response, error = await self._get_with_retry(client, current)
+            response, error, error_type = await self._get_with_retry(client, current)
             if response is None:
-                return None, chain, error
+                return None, chain, error, error_type
 
             if response.status_code in (301, 302, 303, 307, 308) and "location" in response.headers:
                 chain.append((current, response.status_code))
                 current = url_utils.normalize_url(response.headers["location"], base=current)
                 continue
-            return response, chain, ""
+            return response, chain, "", ""
 
-        return None, chain, "too_many_redirects"
+        return None, chain, "too_many_redirects", fetch_errors.CONNECTION_ERROR
 
-    async def _get_with_retry(self, client: httpx.AsyncClient, url: str) -> tuple[Optional[httpx.Response], str]:
+    async def _get_with_retry(
+        self, client: httpx.AsyncClient, url: str
+    ) -> tuple[Optional[httpx.Response], str, str]:
         """GET with retries: network blips get a plain exponential backoff,
         429/503-style responses get the delay the site asked for (or a
         sane default) and pause every other in-flight request too — the
@@ -193,11 +301,15 @@ class Crawler:
         attempt = 0
         while True:
             await self._wait_for_backoff()
+            await self.rate_limiter.acquire()
             try:
                 response = await client.get(url, follow_redirects=False)
             except httpx.RequestError as exc:
                 if attempt >= self.config.max_retries:
-                    return None, str(exc)
+                    # Classify from the exception itself, not str(exc): the
+                    # useful detail (DNS vs TLS vs refused) lives in its
+                    # cause chain, which str() throws away.
+                    return None, str(exc), fetch_errors.classify_fetch_error(exc)
                 await asyncio.sleep(min(_BACKOFF_BASE_SECONDS * (2**attempt), _BACKOFF_MAX_SECONDS))
                 attempt += 1
                 continue
@@ -210,7 +322,7 @@ class Crawler:
                 attempt += 1
                 continue
 
-            return response, ""
+            return response, "", ""
 
     async def run(
         self,
@@ -218,6 +330,8 @@ class Crawler:
         on_progress: OnProgress | None = None,
         stop_flag: StopFlag | None = None,
         on_status: OnStatus | None = None,
+        pause_flag: PauseFlag | None = None,
+        resume: bool = False,
     ) -> CrawlResult:
         self._on_status = on_status
         result = CrawlResult(seed_url=self.config.seed_url)
@@ -267,17 +381,32 @@ class Crawler:
                     await self._status("No se pudo iniciar el navegador; continuando sin renderizado JS…")
 
             try:
-                frontier: list[tuple[str, int]] = [(url_utils.normalize_url(self.config.seed_url), 0)]
-                self.visited.add(frontier[0][0])
-                seed_processed = False
+                frontier = self._restore_frontier() if resume else []
+                if frontier:
+                    self._resumed_from_checkpoint = True
+                    await self._status(
+                        f"Retomando el rastreo: {len(self.visited)} URLs ya vistas, {len(frontier)} pendientes."
+                    )
+                    seed_processed = True  # the seed was handled in the earlier run
+                else:
+                    frontier = [(url_utils.normalize_url(self.config.seed_url), 0)]
+                    self.visited.add(frontier[0][0])
+                    seed_processed = False
 
                 while frontier:
                     if stop_flag and stop_flag():
                         result.stopped_early = True
+                        # Keep the checkpoint on a deliberate stop so the
+                        # user can pick the crawl back up; only a crawl that
+                        # actually finishes clears it.
+                        self._write_checkpoint(frontier, force=True)
                         break
+                    await self._wait_while_paused(pause_flag, frontier)
                     if len(self.pages) >= self.config.max_pages:
                         result.stopped_early = True
                         break
+
+                    self._write_checkpoint(frontier)
 
                     budget = self.config.max_pages - len(self.pages)
                     batch = frontier[:budget]
@@ -348,6 +477,11 @@ class Crawler:
 
         result.pages = self.pages
         result.finished_at = time.time()
+        result.resumed_from_checkpoint = self._resumed_from_checkpoint
+        if not result.stopped_early:
+            # Ran to completion — nothing left to resume, so don't leave a
+            # checkpoint around to tempt a pointless "retomar" next launch.
+            self._clear_checkpoint()
         await self._status("Crawl terminado.")
         return result
 
@@ -511,7 +645,7 @@ class Crawler:
 
             await self._status(f"Rastreando {url}")
             start = time.monotonic()
-            response, chain, error = await self._fetch_with_redirect_chain(client, url)
+            response, chain, error, error_type = await self._fetch_with_redirect_chain(client, url)
             fetch_time_ms = (time.monotonic() - start) * 1000
 
             page = PageResult(url=url, depth=depth, fetch_time_ms=fetch_time_ms, redirect_chain=chain)
@@ -527,6 +661,7 @@ class Crawler:
                     self._tls_fallback_used = True
                 else:
                     page.error = error
+                    page.error_type = error_type or fetch_errors.classify_fetch_error(error)
                     page.issues = issues_mod.collect_page_issues(page, self.priority_urls)
                     return page, []
             else:
@@ -557,6 +692,8 @@ class Crawler:
                 page.tech = tech_detect.detect_tech(html, page.headers)
                 page.meta_keywords = analysis.meta_keywords
                 page.images_without_alt = analysis.images_without_alt
+                if self.config.check_images:
+                    page.broken_images = await self._find_broken_images(client, analysis.image_srcs)
                 page.empty_anchors = analysis.empty_anchors
                 page.keywords = keywords.extract_keywords(
                     analysis.title, analysis.h1, analysis.meta_description, analysis.visible_text
@@ -734,7 +871,7 @@ class Crawler:
         host = parsed.netloc or parsed.path
 
         http_url = url_utils.swap_scheme(self.config.seed_url, "http")
-        response, chain, error = await self._fetch_with_redirect_chain(client, http_url)
+        response, chain, error, _error_type = await self._fetch_with_redirect_chain(client, http_url)
         if response is not None:
             final_url = str(response.url)
             result.site_issues.extend(security.check_http_to_https_redirect(chain, final_url))
@@ -766,6 +903,15 @@ async def crawl(
     on_progress: OnProgress | None = None,
     stop_flag: StopFlag | None = None,
     on_status: OnStatus | None = None,
+    pause_flag: PauseFlag | None = None,
+    resume: bool = False,
 ) -> CrawlResult:
     crawler = Crawler(config)
-    return await crawler.run(on_page=on_page, on_progress=on_progress, stop_flag=stop_flag, on_status=on_status)
+    return await crawler.run(
+        on_page=on_page,
+        on_progress=on_progress,
+        stop_flag=stop_flag,
+        on_status=on_status,
+        pause_flag=pause_flag,
+        resume=resume,
+    )

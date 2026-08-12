@@ -1,18 +1,22 @@
 from __future__ import annotations
 
-from spidermapp.core import html_analysis, redirects, render_check, security, url_utils
+from spidermapp.core import fetch_errors, html_analysis, redirects, render_check, security, url_utils
 from spidermapp.core.models import Issue, IssueCategory, IssueSeverity, PageResult
 from spidermapp.core.soft_404 import check_soft_404
 
 
-def response_code_issues(status_code: int | None, error: str) -> list[Issue]:
+def response_code_issues(status_code: int | None, error: str, error_type: str = "") -> list[Issue]:
     if status_code is None:
+        # One code per failure category, so the recommendation can name the
+        # actual fix instead of "revisa la conexión".
+        code = error_type or fetch_errors.CONNECTION_ERROR
+        detail = f" ({error})" if error else ""
         return [
             Issue(
                 IssueCategory.RESPONSE_CODES,
                 IssueSeverity.CRITICAL,
-                "fetch_error",
-                f"No se pudo obtener la página: {error or 'error desconocido'}.",
+                code,
+                f"{fetch_errors.error_label(code)}{detail}.",
             )
         ]
     if status_code == 404:
@@ -36,6 +40,21 @@ def response_code_issues(status_code: int | None, error: str) -> list[Issue]:
             )
         ]
     return []
+
+
+def broken_image_issues(broken_images: list[str]) -> list[Issue]:
+    if not broken_images:
+        return []
+    sample = ", ".join(broken_images[:3])
+    more = f" (y {len(broken_images) - 3} más)" if len(broken_images) > 3 else ""
+    return [
+        Issue(
+            IssueCategory.LINKS,
+            IssueSeverity.WARNING,
+            "broken_image",
+            f"{len(broken_images)} imagen(es) no cargan: {sample}{more}.",
+        )
+    ]
 
 
 def priority_url_indexation_issue(page: PageResult, priority_urls: set[str]) -> list[Issue]:
@@ -62,8 +81,9 @@ def collect_page_issues(page: PageResult, priority_urls: set[str] | None = None)
     priority_urls = priority_urls or set()
     found: list[Issue] = []
 
-    found.extend(response_code_issues(page.status_code, page.error))
+    found.extend(response_code_issues(page.status_code, page.error, page.error_type))
     found.extend(url_utils.check_url_conventions(page.url))
+    found.extend(broken_image_issues(page.broken_images))
 
     if page.status_code == 200:
         found.extend(html_analysis.check_title(page.title))

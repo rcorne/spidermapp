@@ -10,8 +10,27 @@ def test_response_code_issues_5xx():
     assert issues.response_code_issues(503, "")[0].code == "error_5xx"
 
 
-def test_response_code_issues_fetch_error():
-    assert issues.response_code_issues(None, "timeout")[0].code == "fetch_error"
+def test_response_code_issues_uses_the_classified_error_type():
+    """A failed fetch reports its category (so the recommendation can name a
+    real fix) rather than one catch-all "fetch_error"."""
+    issue = issues.response_code_issues(None, "certificate has expired", "ssl_error")[0]
+    assert issue.code == "ssl_error"
+    assert "certificate has expired" in issue.message
+
+
+def test_response_code_issues_unclassified_failure_falls_back():
+    assert issues.response_code_issues(None, "weird")[0].code == "connection_error"
+
+
+def test_broken_image_issue_lists_a_sample_and_a_count():
+    issue = issues.broken_image_issues(["/a.png", "/b.png", "/c.png", "/d.png"])[0]
+    assert issue.code == "broken_image"
+    assert "4 imagen(es)" in issue.message
+    assert "y 1 más" in issue.message
+
+
+def test_no_broken_image_issue_when_all_images_load():
+    assert issues.broken_image_issues([]) == []
 
 
 def test_response_code_issues_ok():

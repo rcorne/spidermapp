@@ -63,6 +63,13 @@ class CrawlConfig:
     max_query_params: int = 0  # 0 = sin límite
     max_links_per_page: int = 0  # 0 = sin límite
     max_retries: int = 2
+    # 0 = sin límite de ritmo (por defecto). Útil para sitios frágiles o
+    # compartidos, donde conviene ir despacio a propósito.
+    requests_per_second: float = 0.0
+    check_images: bool = True
+    # Guarda el frontier en disco para poder retomar el crawl si el equipo
+    # se suspende, la app se cierra, o el rastreo falla a medio camino.
+    enable_checkpoints: bool = True
 
 
 @dataclass
@@ -128,6 +135,11 @@ class PageResult:
 
     raw_html: str = ""
     error: str = ""
+    # Coarse category for `error` (see core/fetch_errors.py) — a DNS typo, a
+    # refused port and an expired certificate all read as "no se pudo
+    # conectar" otherwise, but need three different fixes.
+    error_type: str = ""
+    broken_images: list[str] = field(default_factory=list)
 
     issues: list[Issue] = field(default_factory=list)
 
@@ -155,6 +167,7 @@ class CrawlResult:
     started_at: float = field(default_factory=time.time)
     finished_at: float | None = None
     stopped_early: bool = False
+    resumed_from_checkpoint: bool = False
     duplicate_content_groups: dict[str, list[str]] = field(default_factory=dict)
     duplicate_title_groups: dict[str, list[str]] = field(default_factory=dict)
     duplicate_meta_groups: dict[str, list[str]] = field(default_factory=dict)

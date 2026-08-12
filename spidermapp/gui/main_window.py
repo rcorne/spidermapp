@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QFileDialog,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QMainWindow,
@@ -27,7 +28,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from spidermapp.core import app_settings, backend_client, export, history, pdf_report, pptx_report, reports
+from spidermapp.core import app_settings, backend_client, checkpoint, export, history, pdf_report, pptx_report, reports
 from spidermapp.core.models import CrawlConfig, CrawlResult, IssueCategory, PageResult
 from spidermapp.gui import paths, theme
 from spidermapp.gui.about_dialog import AboutDialog
@@ -49,6 +50,14 @@ from spidermapp.gui.today_view import TodayView
 
 SITEMAP_REFRESH_EVERY_N_PAGES = 15
 MAX_CRAWL_PAGES = 10000
+
+
+def _humanize_age(seconds: float) -> str:
+    if seconds < 3600:
+        return f"hace {max(1, int(seconds // 60))} min"
+    if seconds < 86400:
+        return f"hace {int(seconds // 3600)} h"
+    return f"hace {int(seconds // 86400)} d"
 
 
 class MainWindow(QMainWindow):
@@ -242,7 +251,8 @@ class MainWindow(QMainWindow):
         action(edicion, "Copiar tabla visible (CSV)", self._copy_visible_table)
 
         analisis = menubar.addMenu("Análisis")
-        action(analisis, "Iniciar crawl", self._start_crawl, "Ctrl+R")
+        action(analisis, "Iniciar crawl", lambda: self._start_crawl(), "Ctrl+R")
+        action(analisis, "Retomar crawl guardado…", self._resume_saved_crawl)
         action(analisis, "Detener crawl", self._stop_crawl, "Ctrl+.")
         analisis.addSeparator()
         action(analisis, "Comparar con crawl anterior", self._compare_with_previous)
@@ -339,14 +349,24 @@ class MainWindow(QMainWindow):
         self.url_input = QLineEdit()
         self.url_input.setPlaceholderText("https://ejemplo.com")
         self.url_input.setMinimumWidth(140)
-        self.url_input.returnPressed.connect(self._start_crawl)
+        self.url_input.returnPressed.connect(lambda: self._start_crawl())
         row1.addWidget(self.url_input, stretch=1)
 
         self.start_button = QPushButton("Iniciar crawl")
         self.start_button.setStyleSheet(theme.BUTTON_PRIMARY_QSS)
         self.start_button.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.start_button.clicked.connect(self._start_crawl)
+        self.start_button.clicked.connect(lambda: self._start_crawl())
         row1.addWidget(self.start_button)
+
+        self.pause_button = QPushButton("Pausar")
+        self.pause_button.setToolTip(
+            "Pausa el rastreo y guarda el avance. Puedes cerrar Pidge y retomarlo después desde donde quedó."
+        )
+        self.pause_button.setStyleSheet(theme.BUTTON_SECONDARY_QSS)
+        self.pause_button.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.pause_button.setEnabled(False)
+        self.pause_button.clicked.connect(self._toggle_pause)
+        row1.addWidget(self.pause_button)
 
         self.stop_button = QPushButton("Detener")
         self.stop_button.setStyleSheet(theme.BUTTON_DANGER_QSS)
@@ -409,7 +429,7 @@ class MainWindow(QMainWindow):
 
         return outer
 
-    def _start_crawl(self) -> None:
+    def _start_crawl(self, resume: bool = False) -> None:
         if self._worker is not None and self._worker.isRunning():
             self.statusBar().showMessage("Ya hay un crawl en curso.")
             return
@@ -445,7 +465,7 @@ class MainWindow(QMainWindow):
         )
 
         prevent_sleep = app_settings.load_settings().default_prevent_sleep
-        self._worker = CrawlWorker(config, prevent_sleep=prevent_sleep)
+        self._worker = CrawlWorker(config, prevent_sleep=prevent_sleep, resume=resume)
         self._worker.page_found.connect(self._on_page_found)
         self._worker.progress.connect(self._on_progress)
         self._worker.status_changed.connect(self._on_status_changed)
@@ -455,16 +475,60 @@ class MainWindow(QMainWindow):
 
         self.progress_bar.setRange(0, config.max_pages)
         self.progress_bar.setValue(0)
-        self.phase_label.setText("Iniciando crawl…")
+        self.phase_label.setText("Retomando crawl…" if resume else "Iniciando crawl…")
 
         self.start_button.setEnabled(False)
         self.stop_button.setEnabled(True)
+        self.pause_button.setEnabled(True)
+        self.pause_button.setText("Pausar")
         self.statusBar().showMessage(f"Rastreando {seed_url}...")
 
     def _stop_crawl(self) -> None:
         if self._worker is not None:
             self._worker.stop()
+            self.pause_button.setEnabled(False)
             self.statusBar().showMessage("Deteniendo crawl...")
+
+    def _resume_saved_crawl(self) -> None:
+        """Pick up a crawl that was paused, stopped, or cut short — the
+        checkpoint holds the pending queue, so it restarts from there
+        rather than re-fetching everything."""
+        if self._worker is not None and self._worker.isRunning():
+            QMessageBox.information(self, "Pidge", "Ya hay un crawl en curso.")
+            return
+
+        saved = checkpoint.find_resumable()
+        if not saved:
+            QMessageBox.information(
+                self,
+                "Pidge",
+                "No hay ningún crawl guardado para retomar.\n\n"
+                "Se guarda uno automáticamente cuando pausas o detienes un rastreo a medio camino.",
+            )
+            return
+
+        options = [
+            f"{c.seed_url} — {len(c.frontier)} URLs pendientes ({_humanize_age(c.age_seconds)})" for c in saved
+        ]
+        choice, ok = QInputDialog.getItem(self, "Retomar crawl", "Elige el rastreo a retomar:", options, 0, False)
+        if not ok:
+            return
+
+        selected = saved[options.index(choice)]
+        self.url_input.setText(selected.seed_url)
+        self._start_crawl(resume=True)
+
+    def _toggle_pause(self) -> None:
+        if self._worker is None or not self._worker.isRunning():
+            return
+        if self._worker.is_paused:
+            self._worker.resume_crawl()
+            self.pause_button.setText("Pausar")
+            self.statusBar().showMessage("Reanudando crawl...")
+        else:
+            self._worker.pause()
+            self.pause_button.setText("Reanudar")
+            self.statusBar().showMessage("Crawl en pausa — el avance quedó guardado.")
 
     def _on_page_found(self, page: PageResult) -> None:
         self.table_model.upsert_page(page)
@@ -492,6 +556,8 @@ class MainWindow(QMainWindow):
     def _on_crawl_finished(self, result: CrawlResult) -> None:
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
+        self.pause_button.setEnabled(False)
+        self.pause_button.setText("Pausar")
         self.progress_bar.setValue(self.progress_bar.maximum() if not result.stopped_early else self.progress_bar.value())
         self.phase_label.setText("Crawl terminado.")
 
@@ -518,15 +584,23 @@ class MainWindow(QMainWindow):
             pass
         self.compare_button.setEnabled(self._previous_snapshot is not None)
 
-        note = " (detenido antes de terminar)" if result.stopped_early else ""
-        self.statusBar().showMessage(
-            f"Crawl terminado{note}: {len(result.pages)} páginas rastreadas. "
-            f"Revisa Vista general para la estructura técnica y las oportunidades de mejora."
-        )
+        if result.stopped_early:
+            # The crawler kept a checkpoint, so say so — otherwise "detenido"
+            # reads as "that work is gone".
+            self.statusBar().showMessage(
+                f"Crawl detenido antes de terminar: {len(result.pages)} páginas rastreadas. "
+                f"El avance quedó guardado — puedes retomarlo desde Análisis → Retomar crawl."
+            )
+        else:
+            self.statusBar().showMessage(
+                f"Crawl terminado: {len(result.pages)} páginas rastreadas. "
+                f"Revisa Vista general para la estructura técnica y las oportunidades de mejora."
+            )
 
     def _on_crawl_error(self, message: str) -> None:
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
+        self.pause_button.setEnabled(False)
         self.statusBar().showMessage("Error durante el crawl.")
         QMessageBox.critical(self, "Spidermapp", f"Error durante el crawl:\n{message}")
 

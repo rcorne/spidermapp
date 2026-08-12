@@ -18,7 +18,7 @@ from PySide6.QtWidgets import (
 
 from spidermapp.gui import theme
 
-APP_VERSION = "0.2.0"
+APP_VERSION = "2.0.0"
 GITHUB_REPO = "rcorne/spidermapp"
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}"
 GITHUB_URL = f"https://github.com/{GITHUB_REPO}"
@@ -105,7 +105,9 @@ class AboutDialog(QDialog):
         info = QLabel(
             "Licencia: <b>MIT</b><br>"
             "Desarrollado por <b>@rcorne</b><br>"
-            f'Repositorio: <a href="{GITHUB_URL}">{GITHUB_URL}</a>'
+            f'Repositorio: <a href="{GITHUB_URL}">{GITHUB_URL}</a><br><br>'
+            "Incluye código adaptado de "
+            '<a href="https://github.com/PhialsBasement/LibreCrawl">LibreCrawl</a> (MIT, © 2025 Phiality).'
         )
         info.setTextFormat(Qt.TextFormat.RichText)
         info.setOpenExternalLinks(True)

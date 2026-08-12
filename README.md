@@ -1,11 +1,33 @@
-# Pidge
+# Pidge 2.0
 
 Auditor de SEO de escritorio, similar a Screaming Frog SEO Spider. Rastrea un sitio siguiendo
 enlaces internos y audita cada URL contra una lista amplia de checks técnicos de SEO.
+Disponible como app de macOS y como programa de Windows.
 
 (El paquete de Python y el repositorio conservan el nombre interno `spidermapp` — solo el
-branding de cara al usuario, el `.app`/`.dmg` empaquetados y el título de la ventana usan
+branding de cara al usuario, los binarios empaquetados y el título de la ventana usan
 "Pidge".)
+
+## Novedades de la 2.0
+
+Incorpora funcionalidad adaptada de [LibreCrawl](https://github.com/PhialsBasement/LibreCrawl)
+(MIT — ver [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md)) sobre el motor asíncrono que
+Pidge ya tenía:
+
+- **Pausar y retomar un rastreo.** El crawler guarda la cola pendiente en disco cada pocos
+  segundos. Si pausas, detienes, cierras la app, o el equipo se suspende a medio camino, el
+  avance no se pierde: *Análisis → Retomar crawl guardado…* continúa desde donde quedó en vez
+  de volver a rastrear todo. (Complementa la opción de evitar la suspensión: esa *previene* que
+  el equipo duerma, el checkpoint *sobrevive* a que duerma igual.)
+- **Errores de red diagnosticados.** Un fallo de rastreo ya no dice solo "no se pudo conectar":
+  distingue dominio que no resuelve (DNS), timeout, conexión rechazada y problema de
+  certificado/TLS — cada uno con su propia recomendación, porque cada uno se arregla distinto.
+- **Detección de imágenes rotas.** Antes se revisaba el `alt`; ahora también se verifica que
+  cada imagen efectivamente cargue (con HEAD, para no descargar los archivos completos).
+- **Límite de ritmo opcional.** Un tope de peticiones por segundo para sitios frágiles o
+  compartidos, que reparte las peticiones de forma pareja en vez de mandarlas en ráfagas.
+- **Windows.** La prevención de suspensión ahora usa `SetThreadExecutionState` en Windows y
+  `caffeinate` en macOS, y el empaquetado cubre ambas plataformas.
 
 ## Instalación
 
@@ -30,6 +52,33 @@ En la app: ingresa la URL semilla, ajusta máx. páginas / profundidad / concurr
 "Renderizar JS" si quieres comparar HTML crudo vs renderizado y mobile vs desktop (más lento),
 y presiona "Iniciar crawl". Los resultados aparecen en vivo en la tabla; la barra lateral
 izquierda filtra por categoría de issue. Exporta a CSV o XLSX desde la barra superior.
+
+## Empaquetar para Windows (.exe)
+
+**PyInstaller solo puede construir para el sistema operativo donde se ejecuta** — no existe
+compilación cruzada: desde un Mac no se puede generar un `.exe` de Windows. Por eso el binario
+de Windows lo construye GitHub Actions en un runner `windows-latest`, no la máquina local.
+
+El workflow está en [`.github/workflows/build.yml`](.github/workflows/build.yml) y corre solo
+en cada push a `main`. Para bajar el resultado:
+
+1. Ve a la pestaña **Actions** del repo en GitHub.
+2. Abre la ejecución más reciente de "Build Pidge".
+3. Descarga el artefacto **Pidge-windows** (un `.zip`) o **Pidge-macos** (el `.dmg`).
+
+Al publicar un tag de versión (`git tag v2.0.0 && git push --tags`) el workflow además adjunta
+ambos instaladores al release de GitHub automáticamente.
+
+Si prefieres construirlo tú en una máquina Windows:
+
+```bash
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt pyinstaller
+pyinstaller packaging/spidermapp.spec --noconfirm
+```
+
+El resultado queda en `dist\Pidge\Pidge.exe`.
 
 ## Empaquetar como app de macOS (.app / .dmg)
 

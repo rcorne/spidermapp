@@ -1,72 +1,54 @@
-import subprocess
-
 from spidermapp.core.models import CrawlConfig
 from spidermapp.gui.crawl_worker import CrawlWorker
 
 
-class _FakeProcess:
-    def __init__(self):
-        self.terminated = False
-        self.waited = False
-
-    def terminate(self):
-        self.terminated = True
-
-    def wait(self, timeout=None):
-        self.waited = True
-
-    def kill(self):
-        pass
+def _worker(**kwargs):
+    return CrawlWorker(CrawlConfig(seed_url="https://example.test/"), **kwargs)
 
 
-def test_start_caffeinate_spawns_process_on_macos(monkeypatch):
-    monkeypatch.setattr("spidermapp.gui.crawl_worker.sys.platform", "darwin")
-    captured = {}
+def test_keep_awake_started_and_stopped_around_the_crawl(monkeypatch):
+    """Sleep prevention should bracket the crawl: on before it starts, off
+    once it's done, even though the crawl itself fails here."""
+    events: list[str] = []
+    worker = _worker(prevent_sleep=True)
+    monkeypatch.setattr(worker._keep_awake, "start", lambda: events.append("start"))
+    monkeypatch.setattr(worker._keep_awake, "stop", lambda: events.append("stop"))
+    monkeypatch.setattr(worker, "_run_crawl", None)  # makes asyncio.run raise
 
-    def fake_popen(cmd, **kwargs):
-        captured["cmd"] = cmd
-        return _FakeProcess()
-
-    monkeypatch.setattr(subprocess, "Popen", fake_popen)
-    worker = CrawlWorker(CrawlConfig(seed_url="https://example.test/"), prevent_sleep=True)
-    worker._start_caffeinate()
-    assert captured["cmd"] == ["caffeinate", "-s", "-i"]
-    assert worker._caffeinate is not None
-    worker._stop_caffeinate()
-    assert worker._caffeinate is None
+    worker.run()
+    assert events == ["start", "stop"]
 
 
-def test_start_caffeinate_skipped_when_disabled(monkeypatch):
-    monkeypatch.setattr("spidermapp.gui.crawl_worker.sys.platform", "darwin")
+def test_keep_awake_skipped_when_disabled(monkeypatch):
+    events: list[str] = []
+    worker = _worker(prevent_sleep=False)
+    monkeypatch.setattr(worker._keep_awake, "start", lambda: events.append("start"))
+    monkeypatch.setattr(worker._keep_awake, "stop", lambda: events.append("stop"))
+    monkeypatch.setattr(worker, "_run_crawl", None)
 
-    def fake_popen(cmd, **kwargs):
-        raise AssertionError("should not spawn caffeinate when prevent_sleep is False")
-
-    monkeypatch.setattr(subprocess, "Popen", fake_popen)
-    worker = CrawlWorker(CrawlConfig(seed_url="https://example.test/"), prevent_sleep=False)
-    worker._start_caffeinate()
-    assert worker._caffeinate is None
-
-
-def test_start_caffeinate_skipped_on_non_macos(monkeypatch):
-    monkeypatch.setattr("spidermapp.gui.crawl_worker.sys.platform", "linux")
-
-    def fake_popen(cmd, **kwargs):
-        raise AssertionError("should not spawn caffeinate on non-macOS platforms")
-
-    monkeypatch.setattr(subprocess, "Popen", fake_popen)
-    worker = CrawlWorker(CrawlConfig(seed_url="https://example.test/"), prevent_sleep=True)
-    worker._start_caffeinate()
-    assert worker._caffeinate is None
+    worker.run()
+    assert "start" not in events
 
 
-def test_start_caffeinate_missing_binary_is_tolerated(monkeypatch):
-    monkeypatch.setattr("spidermapp.gui.crawl_worker.sys.platform", "darwin")
+def test_pause_and_resume_toggle_the_flag():
+    worker = _worker()
+    assert not worker.is_paused
+    worker.pause()
+    assert worker.is_paused
+    worker.resume_crawl()
+    assert not worker.is_paused
 
-    def fake_popen(cmd, **kwargs):
-        raise FileNotFoundError("no caffeinate")
 
-    monkeypatch.setattr(subprocess, "Popen", fake_popen)
-    worker = CrawlWorker(CrawlConfig(seed_url="https://example.test/"), prevent_sleep=True)
-    worker._start_caffeinate()
-    assert worker._caffeinate is None
+def test_stop_also_clears_pause():
+    """A paused crawl still has to be stoppable — otherwise it never reaches
+    the stop check and quitting the app hangs on the thread."""
+    worker = _worker()
+    worker.pause()
+    worker.stop()
+    assert not worker.is_paused
+    assert worker._stop_event.is_set()
+
+
+def test_resume_flag_is_passed_through():
+    assert _worker(resume=True).resume is True
+    assert _worker().resume is False

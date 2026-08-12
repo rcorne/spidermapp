@@ -38,6 +38,55 @@ _RECOMMENDATIONS: dict[str, Recommendation] = {
         "No bloquea la indexación, pero desaprovecha una oportunidad de diferenciar el snippet en resultados de búsqueda.",
         ["Escribe una meta description única para esta página."],
     ),
+    "dns_not_found": Recommendation(
+        "El dominio no resuelve (DNS)",
+        "No existe un registro DNS para este host, así que ni Google ni los visitantes pueden siquiera intentar cargarlo. Suele ser un dominio mal escrito en un enlace, o un subdominio que ya no existe.",
+        [
+            "Verifica que el dominio esté bien escrito en los enlaces que apuntan aquí.",
+            "Si el subdominio debería existir, revisa sus registros DNS con tu proveedor.",
+        ],
+    ),
+    "timeout": Recommendation(
+        "El servidor no respondió a tiempo",
+        "El servidor aceptó la conexión pero tardó demasiado en contestar. Google también abandona páginas lentas, así que esto cuesta rastreo e indexación.",
+        [
+            "Revisa la carga del servidor y los tiempos de respuesta de la aplicación.",
+            "Si el sitio es lento solo bajo carga, baja los hilos del rastreo o sube el timeout en Preferencias.",
+        ],
+    ),
+    "connection_refused": Recommendation(
+        "El servidor rechazó la conexión",
+        "Hay un host respondiendo en ese dominio, pero está cerrando la conexión en ese puerto — típicamente el servicio caído, o un firewall bloqueando.",
+        [
+            "Verifica que el servidor web esté corriendo y escuchando en el puerto correcto.",
+            "Revisa firewall / reglas de seguridad que puedan estar bloqueando el acceso.",
+        ],
+    ),
+    "ssl_error": Recommendation(
+        "Falló la conexión segura (TLS)",
+        "El certificado no se pudo validar. Los navegadores muestran una advertencia a pantalla completa antes de dejar entrar, y Google no indexa lo que no puede cargar de forma segura.",
+        [
+            "Revisa si el certificado está vencido y renuévalo.",
+            "Verifica que el certificado cubra exactamente este dominio (incluyendo www si aplica).",
+            "Confirma que la cadena de certificados intermedios esté completa.",
+        ],
+    ),
+    "connection_error": Recommendation(
+        "No se pudo conectar con el servidor",
+        "La conexión falló por una razón que no cae en DNS, timeout, rechazo ni TLS. Sin poder cargar la página, no hay nada que indexar.",
+        [
+            "Verifica que la URL sea correcta y que el servidor esté disponible.",
+            "Reintenta el rastreo; si persiste, revisa los logs del servidor a esa hora.",
+        ],
+    ),
+    "broken_image": Recommendation(
+        "Hay imágenes que no cargan",
+        "Las imágenes rotas se ven como espacios vacíos o íconos de error para el visitante, y desperdician el texto alt que sí escribiste.",
+        [
+            "Corrige la ruta de cada imagen listada, o súbela si falta en el servidor.",
+            "Si la imagen ya no se usa, quita la etiqueta <img> en vez de dejarla apuntando a la nada.",
+        ],
+    ),
     "error_404": Recommendation(
         "Página no encontrada (404)",
         "Los visitantes y Google llegan a un callejón sin salida; si tenía enlaces o tráfico, ese valor se pierde.",

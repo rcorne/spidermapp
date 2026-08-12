@@ -4,7 +4,7 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass, field
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 from bs4 import BeautifulSoup
 
@@ -35,6 +35,7 @@ class HtmlAnalysis:
     images_without_alt: int = 0
     empty_anchors: int = 0
     visible_text: str = ""
+    image_srcs: list[str] = field(default_factory=list)
 
 
 def analyze_html(html: str, page_url: str) -> HtmlAnalysis:
@@ -73,7 +74,18 @@ def analyze_html(html: str, page_url: str) -> HtmlAnalysis:
     meta_kw_tag = soup.find("meta", attrs={"name": re.compile("^keywords$", re.I)})
     meta_keywords = meta_kw_tag.get("content", "").strip() if meta_kw_tag else ""
 
-    images_without_alt = sum(1 for img in soup.find_all("img") if not (img.get("alt") or "").strip())
+    images_without_alt = 0
+    image_srcs: list[str] = []
+    for img in soup.find_all("img"):
+        if not (img.get("alt") or "").strip():
+            images_without_alt += 1
+        src = (img.get("src") or "").strip()
+        # data: URIs are inline bytes — there's nothing to request, so
+        # nothing that can 404.
+        if src and not src.lower().startswith("data:"):
+            resolved = urljoin(page_url, src)
+            if resolved not in image_srcs:
+                image_srcs.append(resolved)
 
     empty_anchors = 0
     for a in soup.find_all("a"):
@@ -106,6 +118,7 @@ def analyze_html(html: str, page_url: str) -> HtmlAnalysis:
         images_without_alt=images_without_alt,
         empty_anchors=empty_anchors,
         visible_text=visible_text,
+        image_srcs=image_srcs,
     )
 
 
