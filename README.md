@@ -28,6 +28,17 @@ Pidge ya tenía:
   compartidos, que reparte las peticiones de forma pareja en vez de mandarlas en ráfagas.
 - **Windows.** La prevención de suspensión ahora usa `SetThreadExecutionState` en Windows y
   `caffeinate` en macOS, y el empaquetado cubre ambas plataformas.
+- **Empezar de cero.** *Archivo → Empezar de cero…* deja la app como recién instalada: vacía la
+  tabla, el mapa, "Hoy" y el tablero al instante, sin reiniciar. El borrado es granular y
+  muestra cuánto ocupa cada cosa antes de confirmar; las credenciales (API keys de conectores,
+  client IDs de OAuth) y las preferencias vienen **desmarcadas**, porque recuperarlas obliga a
+  volver a cada consola de desarrolladores.
+
+  Por defecto **mueve los datos a una carpeta de respaldo** (`~/.spidermapp/_respaldo_<fecha>/`)
+  en vez de destruirlos, porque el historial de crawls no se puede regenerar: es el registro de
+  cómo estaba un sitio un día concreto, y volver a rastrear no devuelve la foto del mes pasado.
+  Además exige escribir `BORRAR` para habilitar el botón, y el botón destructivo está fuera del
+  camino de la tecla Enter a propósito.
 
 ## Instalación
 

@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from spidermapp.core import app_settings, backend_client, checkpoint, export, history, pdf_report, pptx_report, reports
+from spidermapp.core import app_settings, backend_client, checkpoint, data_reset, export, history, pdf_report, pptx_report, reports
 from spidermapp.core.models import CrawlConfig, CrawlResult, IssueCategory, PageResult
 from spidermapp.gui import paths, theme
 from spidermapp.gui.about_dialog import AboutDialog
@@ -41,6 +41,7 @@ from spidermapp.gui.history_dialog import HistoryDialog
 from spidermapp.gui.llm_tab import LlmVisibilityTab
 from spidermapp.gui.news_ticker import NewsTicker
 from spidermapp.gui.rail_nav import RailNav
+from spidermapp.gui.reset_dialog import ResetDataDialog
 from spidermapp.gui.settings_dialog import SettingsDialog
 from spidermapp.gui.sidebar import ALL_KEY, DUPLICATES_KEY, ISSUES_KEY, ORPHANS_KEY, Sidebar
 from spidermapp.gui.sitemap_view import SiteMapTab
@@ -240,6 +241,8 @@ class MainWindow(QMainWindow):
         archivo = menubar.addMenu("Archivo")
         action(archivo, "Nuevo crawl…", self._menu_new_crawl, "Ctrl+N")
         action(archivo, "Abrir crawl guardado…", self._open_history_dialog, "Ctrl+O")
+        archivo.addSeparator()
+        action(archivo, "Empezar de cero…", self._open_reset_dialog)
         # Preferencias… and Salir carry PreferencesRole/QuitRole below, so
         # macOS pulls them into the native app menu — no separators needed
         # here since nothing custom is left to separate them from.
@@ -488,6 +491,92 @@ class MainWindow(QMainWindow):
             self._worker.stop()
             self.pause_button.setEnabled(False)
             self.statusBar().showMessage("Deteniendo crawl...")
+
+    def _open_reset_dialog(self) -> None:
+        """Archivo → Empezar de cero. Wipes the chosen data and returns the
+        whole interface to its just-installed state in place."""
+        if self._worker is not None and self._worker.isRunning():
+            QMessageBox.information(
+                self,
+                "Pidge",
+                "Hay un crawl en curso. Detenlo antes de empezar de cero.",
+            )
+            return
+
+        dialog = ResetDataDialog(self)
+        if not dialog.exec():
+            return
+
+        keys = dialog.selected_keys()
+        if not keys:
+            return
+
+        try:
+            report = data_reset.reset(keys, backup=dialog.wants_backup())
+        except (data_reset.ResetError, OSError) as exc:
+            QMessageBox.critical(self, "Pidge", f"No se pudo borrar todo:\n{exc}")
+            return
+
+        self._reset_frontend_state(cleared_settings="settings" in keys)
+
+        archivos = "archivo" if report.total_files == 1 else "archivos"
+        if report.backup_path is not None:
+            self.statusBar().showMessage(
+                f"Pidge quedó en blanco: {report.total_files} {archivos} movidos a {report.backup_path.name}."
+            )
+            QMessageBox.information(
+                self,
+                "Respaldo guardado",
+                f"Se movieron {report.total_files} {archivos} a:\n\n{report.backup_path}\n\n"
+                "Bórrala a mano cuando confirmes que no la necesitas.",
+            )
+        else:
+            self.statusBar().showMessage(f"Pidge quedó en blanco: se borraron {report.total_files} {archivos}.")
+
+    def _reset_frontend_state(self, cleared_settings: bool = False) -> None:
+        """Return every view to empty. Deleting the files on disk isn't
+        enough — the crawl that's already loaded lives in memory, so without
+        this the app keeps showing data that no longer exists until it's
+        restarted."""
+        self.table_model.clear()
+        self._all_pages = []
+        self._last_result = None
+        self._previous_snapshot = None
+        self._pages_since_sitemap_refresh = 0
+
+        self.detail_panel.show_page(None)
+        self.sidebar.refresh_counts([])
+        self.dashboard_tab.update_data([])
+        self.dashboard_tab.reset_site_info()
+        self.sitemap_tab.set_pages([], "")
+        self.structure_tab.set_pages([], "")
+        self.llm_tab.set_crawl_data("", [])
+
+        self.url_input.clear()
+        self.compare_button.setEnabled(False)
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.phase_label.setText("")
+
+        # These read straight from disk, so they empty out on refresh.
+        self.today_view.refresh()
+        self.board_view.refresh()
+
+        # A wiped session means the chat has no credentials left to use.
+        self.chat_view.stop()
+        self._refresh_login_button()
+
+        if cleared_settings:
+            # Preferences went back to defaults; pull the toolbar in line so
+            # it doesn't keep showing values that are no longer stored.
+            settings = app_settings.load_settings()
+            self.max_pages_input.setValue(settings.default_max_pages)
+            self.max_depth_input.setValue(settings.default_max_depth)
+            self.concurrency_input.setValue(settings.default_concurrency)
+            self.render_js_checkbox.setChecked(settings.default_render_js)
+            self._crawl_advanced = self._load_crawl_advanced()
+
+        self.rail_nav.set_active("hoy")
 
     def _resume_saved_crawl(self) -> None:
         """Pick up a crawl that was paused, stopped, or cut short — the
