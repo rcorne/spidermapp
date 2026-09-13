@@ -13,7 +13,7 @@
 #define AppName "Toomer"
 #define AppVersion "1.0.0"
 #define AppPublisher "rcorne"
-#define AppURL "https://github.com/rcorne/designsystem"
+#define AppURL "https://github.com/rcorne/spidermapp"
 #define AppExeName "Toomer.exe"
 
 [Setup]
